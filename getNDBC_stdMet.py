@@ -17,7 +17,7 @@ td=dt.today()
 this_year=td.year
 # getting access to our local db
 my_host=con['LOCALDB']['host']
-my_port=con['LOCALDB']['port']
+my_port=int(con['LOCALDB']['port'])
 my_user=con['LOCALDB']['user']
 my_passwd=con['LOCALDB']['passwd']
 my_db=con['LOCALDB']['db']
@@ -52,7 +52,7 @@ def getData(station,year,month):
     my_dt=my_d.index.values
     dtime=[]
     for i in my_dt:
-        if len(i[0])==2:
+        if len(str(i[0]))==2:
             Y=i[0]+1900
         else:
             Y=i[0]
@@ -76,6 +76,8 @@ def getData(station,year,month):
                     badFlag=False
                     break
             if badFlag:
+                # THIS IS SETTING ALL COLUMNS TO NAN!!!!!
+                # NEED TO FIX THIS
                 my_d[my_d[col]==flagval]=np.NaN
                 
     return my_d
