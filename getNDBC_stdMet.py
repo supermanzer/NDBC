@@ -6,17 +6,23 @@ GET NDBC
 """
 import MySQLdb as mysql
 import pandas as pd
-
+import configparser
 from datetime import datetime as dt
 import numpy as np
-
+con=configparser.ConfigParser()
+con.read('/home/ryan/Python_Scripts/NDBC/config.ini')
 myyears=range(1987,2016) # The last number won't be generated
 mymonths=range(1,5) # same thing here
 td=dt.today()
 this_year=td.year
 # getting access to our local db
-conn=mysql.connect(host='localhost',port=3306,user='root',passwd='ROTroc32121',
-                   db='sci_data')
+my_host=con['LOCALDB']['host']
+my_port=con['LOCALDB']['port']
+my_user=con['LOCALDB']['user']
+my_passwd=con['LOCALDB']['passwd']
+my_db=con['LOCALDB']['db']
+conn=mysql.connect(host=my_host,port=my_port,user=my_user,passwd=my_passwd,
+                   db=my_db)
 cur=conn.cursor()
 # Now let's get our station ids
 sql="SELECT station_id FROM ndbc_stations;" 
