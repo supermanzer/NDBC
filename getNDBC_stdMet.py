@@ -28,6 +28,31 @@ cur=conn.cursor()
 sql="SELECT station_id FROM ndbc_stations;" 
 cur.execute(sql)
 stations=cur.fetchone()
+# Building in fucntionality to replace old names with the correct ones (as of 2014)
+def NDBCNames(oldname):
+    namedict={  #old    #new
+                'YYYY':'YY',
+                '#YY':'YY',
+                'WD':'WDIR',
+                'DIR':'WDIR',
+                'SPD':'WSPD',
+                'GSP':'GST',
+                'GNM':'GTIME',
+                'BAR':'PRES',
+                'BARO':'PRES',
+                'H0':'WVHT',
+                'DOMPD':'DPD',
+                'AVP':'APD',
+                'SRAD':'SWRAD',
+                'SRAD2':'SWRAD',
+                'LRAD':'LWRAD',
+                'LRAD1':'LWRAD'
+                }
+    if oldname in namedict:
+        return namedict[oldname]
+    else:
+        return oldname
+
 def getData(station,year,month):
     base_url = 'http://www.ndbc.noaa.gov/view_text_file.php?filename={}'.format(station)
     if month==0:
@@ -66,22 +91,62 @@ def getData(station,year,month):
     # it is ISO 8601 compliant this should be easily loaded into
     # a MySQL DB.  Now let's handle those bad data flags
     cols=list(my_d.columns) # we need to redo this to account for indexing
+    # AFTER CAREFUL CONSIDERATION IT APPEARS TO ME THAT DEALING WITH BAD DATA
+    # FLAGS WOULD BE EASIER DONE ONCE THE DATA HAS BEEN LOADED INTO THE DATABASE
+    # THEREFORE I WILL SKIP THIS SECTION AND IMPLEMENT A BAD DATA FLAG PROTOCOL
+    # LATER ON, AFTER INSERTING THE RECORDS.
+    newcols=[];
     for col in cols:
-        badFlag=True
-        if my_d[col].max()!=np.nan:
-            flagstr=str(int(my_d[col].max()))
-            flagval=my_d[col].max()
-            for ch in flagstr:
-                if int(ch) != 9:
-                    badFlag=False
-                    break
-            if badFlag:
-                # THIS IS SETTING ALL COLUMNS TO NAN!!!!!
-                # NEED TO FIX THIS
-                my_d[my_d[col]==flagval]=np.NaN
-                
+        newcols.append(NDBCNames(col))
+#        badFlag=True
+#        if my_d[col].max()!=np.nan:
+#            flagstr=str(int(my_d[col].max()))
+#            flagval=my_d[col].max()
+#            for ch in flagstr:
+#                if int(ch) != 9:
+#                    badFlag=False
+#                    break
+#            if badFlag:
+#                # THIS IS SETTING ALL COLUMNS TO NAN!!!!!
+#                # NEED TO FIX THIS
+#                my_d[my_d[col]==flagval]=np.NaN
+    my_d.columns=newcols
     return my_d
-
+    
+def insertStdMet(station,cursor,data):
+    # This function takes in a station id, database cursor and an array of data.  At present
+    # it assumes the data is a pandas dataframe with the datetime value as the index
+    # It may eventually be modified to be more flexible.  With the parameters
+    # passed in, it goes row by row and builds an INSERT INTO SQL statement
+    # that assumes each row in the data array represents a new record to be
+    # added.
+    fields=list(data.columns) # if our table has been constructed properly, these column names should map to the fields in the data table
+    # Building the SQL string
+    strSQL1='REPLACE INTO std_met (station_id,date_time,'
+    strSQL2='VALUES ('
+    for f in fields:
+        strSQL1+=f+','
+        strSQL2+='%s,'
+    # trimming the last comma
+    strSQL1=strSQL1[:-1]
+    strSQL2=strSQL2[:-1]
+    strSQL1+=") " + strSQL2 + ")"
+    # Okay, now we have our SQL string.  Now we need to build the list of tuples
+    # that will be passed along with it to the .executemany() function.
+    tuplist=[]
+    for i in range(len(data)):
+        r=data.iloc[i][:]
+        datatup=(station,r.name)
+        for f in r:
+            datatup+=(f,)
+        tuplist.append(datatup)
+    cursor.executemany(strSQL1,tuplist)
+    
 for station in stations:
     for y in myyears:
-        data=getData(station,y,0)
+        stdmet=getData(station,y,0)
+        insertStdMet(station,cur,stdmet)
+    for m in mymonths:
+        stdmet=getData(station,0,m)
+        insertStdMet(station,cur,stdmet)
+print('Hooray!  You just loaded a crap ton of NDBC data!')
