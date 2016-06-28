@@ -8,6 +8,7 @@ import MySQLdb as mysql
 import pandas as pd
 import configparser
 from datetime import datetime as dt
+import dateutil.parser as par
 import numpy as np
 con=configparser.ConfigParser()
 con.read('/home/ryan/Python_Scripts/NDBC/config.ini')
@@ -63,6 +64,12 @@ def getData(station,year,month):
         print('Not sure what you meant to do here but this is weird')
     # okay now that we have built our url that should point toward the text data file
     # let's grad that data file
+        
+    # we are trainwrecking in 2007 when (at least for station 46042)
+    # NOAA started adding a second line to the header with the units
+    # for each measurement.  It would be nice to capture this somewhere
+    # in our DB but obviously it cannot be part of the numerical data.
+    # Perhaps an additional table?
     my_d=pd.read_csv(target,header=0, engine='python',sep="\s+")
     # Now let's get those pesky year, month, day, and
     # hour columns into a Timestamp
@@ -82,7 +89,7 @@ def getData(station,year,month):
         else:
             Y=i[0]
         if len(cols)==5:
-            strtime=dt(Y,i[1],i[2],i[3],i[4]).isoformat()
+            strtime=dt(int(Y),int(i[1]),int(i[2]),int(i[3]),int(i[4])).isoformat()
         else:
             strtime=dt(Y,i[1],i[2],i[3]).isoformat()
         dtime.append(strtime)
@@ -111,11 +118,12 @@ def getData(station,year,month):
 #                # NEED TO FIX THIS
 #                my_d[my_d[col]==flagval]=np.NaN
     my_d.columns=newcols
+    my_d.fillna(999.0, inplace=True)
     return my_d
     
 def insertStdMet(station,cursor,data):
     # This function takes in a station id, database cursor and an array of data.  At present
-    # it assumes the data is a pandas dataframe with the datetime value as the index
+    # it assumes the data is a pandas dataaframe with the datetime value as the index
     # It may eventually be modified to be more flexible.  With the parameters
     # passed in, it goes row by row and builds an INSERT INTO SQL statement
     # that assumes each row in the data array represents a new record to be
@@ -123,7 +131,7 @@ def insertStdMet(station,cursor,data):
     fields=list(data.columns) # if our table has been constructed properly, these column names should map to the fields in the data table
     # Building the SQL string
     strSQL1='REPLACE INTO std_met (station_id,date_time,'
-    strSQL2='VALUES ('
+    strSQL2='VALUES (%s,%s,'
     for f in fields:
         strSQL1+=f+','
         strSQL2+='%s,'
@@ -134,6 +142,8 @@ def insertStdMet(station,cursor,data):
     # Okay, now we have our SQL string.  Now we need to build the list of tuples
     # that will be passed along with it to the .executemany() function.
     tuplist=[]
+    if par.parse(data.index[0]).year==2000:
+        print('Y2K!')
     for i in range(len(data)):
         r=data.iloc[i][:]
         datatup=(station,r.name)
@@ -141,7 +151,14 @@ def insertStdMet(station,cursor,data):
             datatup+=(f,)
         tuplist.append(datatup)
     cursor.executemany(strSQL1,tuplist)
+    conn.commit()
+# Rolling up both functions into a single function that can be executed using
+# a multi-threading approach
+def wholeShebang(station,year,month,cursor):
+    stdmet=getData(station,year,month)
+    insertStdMet(station,cursor,stdmet)
     
+threads=[]
 for station in stations:
     for y in myyears:
         stdmet=getData(station,y,0)
