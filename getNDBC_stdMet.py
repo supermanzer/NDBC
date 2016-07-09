@@ -13,7 +13,7 @@ import numpy as np
 con=configparser.ConfigParser()
 con.read('/home/ryan/Python_Scripts/NDBC/config.ini')
 myyears=range(1987,2016) # The last number won't be generated
-mymonths=range(1,5) # same thing here
+mymonths=range(1,6) # same thing here
 td=dt.today()
 this_year=td.year
 # getting access to our local db
@@ -54,12 +54,13 @@ def NDBCNames(oldname):
     else:
         return oldname
 
-def getData(station,year,month):
+def getData(cursor,station,year,month):
     base_url = 'http://www.ndbc.noaa.gov/view_text_file.php?filename={}'.format(station)
     if month==0:
         target=base_url+'h'+str(year)+'.txt.gz&dir=data/historical/stdmet/'
     elif year==0:
-        target=base_url+month+this_year+'.txt.gx&dir=data/stdmet/'+td.strftime('%b')+'/'
+        tm=dt(this_year,month,1)
+        target=base_url+str(month)+str(this_year)+'.txt.gz&dir=data/stdmet/'+tm.strftime('%b')+'/'
     else:
         print('Not sure what you meant to do here but this is weird')
     # okay now that we have built our url that should point toward the text data file
@@ -70,10 +71,19 @@ def getData(station,year,month):
     # for each measurement.  It would be nice to capture this somewhere
     # in our DB but obviously it cannot be part of the numerical data.
     # Perhaps an additional table?
-    my_d=pd.read_csv(target,header=0, engine='python',sep="\s+")
+    try:
+        my_d=pd.read_csv(target,header=0, engine='python',sep="\s+")
+    except:
+        if month==0:
+            print("Year " +  str(year) + " is not available")
+        elif year==0:
+            print("Month " + str(month) + " is not available")
+        return pd.DataFrame() # in order to properly evaluate the result we need to return an empty data frame...kind of wasteful memory wise but it works
     # Now let's get those pesky year, month, day, and
     # hour columns into a Timestamp
     # first we get the columns with our datetime info
+    if my_d.iloc[0][0]=="#yr":
+        my_d=insertUnits(cursor,my_d)
     cols=list(my_d.columns)
     if 'mm' in cols:
         cols=cols[0:cols.index('mm')+1]
@@ -142,8 +152,6 @@ def insertStdMet(station,cursor,data):
     # Okay, now we have our SQL string.  Now we need to build the list of tuples
     # that will be passed along with it to the .executemany() function.
     tuplist=[]
-    if par.parse(data.index[0]).year==2000:
-        print('Y2K!')
     for i in range(len(data)):
         r=data.iloc[i][:]
         datatup=(station,r.name)
@@ -152,6 +160,27 @@ def insertStdMet(station,cursor,data):
         tuplist.append(datatup)
     cursor.executemany(strSQL1,tuplist)
     conn.commit()
+def insertUnits(cursor,data):
+    # This function is designed to check whether or not the first line of the 
+    # pandas data frame passed in contains additional string information, usually
+    # the units for the parameters measured.  If so it will insert those units
+    # into the units table in our database
+    r=data.iloc[0][:]
+    if isinstance(r[0],str): # if we have a string we assume r represents the units
+        cols=list(data.columns) # getting our list of columns
+        strSQL="REPLACE INTO units (parameter, unit) VALUES (%s,%s)"
+        tuplist=[]
+        if 'mm' in cols:
+            start_index=cols.index('mm')+1
+        else:
+            start_index=cols.index('hh')+1
+        for col in cols[start_index:]:
+            datatup=(col,r[col])
+            tuplist.append(datatup)
+        cursor.executemany(strSQL,tuplist)
+        data = data.iloc[1:][:]
+    return data
+        
 # Rolling up both functions into a single function that can be executed using
 # a multi-threading approach
 def wholeShebang(station,year,month,cursor):
@@ -160,10 +189,11 @@ def wholeShebang(station,year,month,cursor):
     
 threads=[]
 for station in stations:
-    for y in myyears:
-        stdmet=getData(station,y,0)
-        insertStdMet(station,cur,stdmet)
+#    for y in myyears:
+#        stdmet=getData(cur,station,y,0)
+#        insertStdMet(station,cur,stdmet)
     for m in mymonths:
-        stdmet=getData(station,0,m)
-        insertStdMet(station,cur,stdmet)
+        stdmet=getData(cur,station,0,m)
+        if not stdmet.empty:
+            insertStdMet(station,cur,stdmet)
 print('Hooray!  You just loaded a crap ton of NDBC data!')
