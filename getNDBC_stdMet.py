@@ -8,8 +8,6 @@ import MySQLdb as mysql
 import pandas as pd
 import configparser
 from datetime import datetime as dt
-import dateutil.parser as par
-import numpy as np
 con=configparser.ConfigParser()
 con.read('/home/ryan/Python_Scripts/NDBC/config.ini')
 myyears=range(1987,2016) # The last number won't be generated
@@ -182,7 +180,7 @@ def insertUnits(cursor,data):
     return data
         
 # Rolling up both functions into a single function that can be executed using
-# a multi-threading approach
+# a multi-threading approach--not currently using this approach
 def wholeShebang(station,year,month,cursor):
     stdmet=getData(station,year,month)
     insertStdMet(station,cursor,stdmet)
