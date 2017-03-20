@@ -4,14 +4,14 @@ Created on Fri May 20 19:55:41 2016
 GET NDBC
 @author: ryan
 """
-import MySQLdb as mysql
+import pymysql.cursors
 import pandas as pd
 import configparser
 from datetime import datetime as dt
 con=configparser.ConfigParser()
 con.read('/home/ryan/Python_Scripts/NDBC/config.ini')
-myyears=range(1987,2016) # The last number won't be generated
-mymonths=range(1,6) # same thing here
+myyears=range(1987,2017) # The last number won't be generated
+mymonths=range(1,3) # same thing here
 td=dt.today()
 this_year=td.year
 # getting access to our local db
@@ -20,11 +20,11 @@ my_port=int(con['LOCALDB']['port'])
 my_user=con['LOCALDB']['user']
 my_passwd=con['LOCALDB']['passwd']
 my_db=con['LOCALDB']['db']
-conn=mysql.connect(host=my_host,port=my_port,user=my_user,passwd=my_passwd,
+conn=pymysql.connect(host=my_host,port=my_port,user=my_user,passwd=my_passwd,
                    db=my_db)
 cur=conn.cursor()
 # Now let's get our station ids
-sql="SELECT station_id FROM ndbc_stations;" 
+sql="SELECT station_id FROM ndbc_stations;"
 cur.execute(sql)
 stations=cur.fetchone()
 # Building in fucntionality to replace old names with the correct ones (as of 2014)
@@ -62,8 +62,8 @@ def getData(cursor,station,year,month):
     else:
         print('Not sure what you meant to do here but this is weird')
     # okay now that we have built our url that should point toward the text data file
-    # let's grad that data file
-        
+    # let's grab that data file
+
     # we are trainwrecking in 2007 when (at least for station 46042)
     # NOAA started adding a second line to the header with the units
     # for each measurement.  It would be nice to capture this somewhere
@@ -128,7 +128,7 @@ def getData(cursor,station,year,month):
     my_d.columns=newcols
     my_d.fillna(999.0, inplace=True)
     return my_d
-    
+
 def insertStdMet(station,cursor,data):
     # This function takes in a station id, database cursor and an array of data.  At present
     # it assumes the data is a pandas dataaframe with the datetime value as the index
@@ -159,7 +159,7 @@ def insertStdMet(station,cursor,data):
     cursor.executemany(strSQL1,tuplist)
     conn.commit()
 def insertUnits(cursor,data):
-    # This function is designed to check whether or not the first line of the 
+    # This function is designed to check whether or not the first line of the
     # pandas data frame passed in contains additional string information, usually
     # the units for the parameters measured.  If so it will insert those units
     # into the units table in our database
@@ -178,16 +178,16 @@ def insertUnits(cursor,data):
         cursor.executemany(strSQL,tuplist)
         data = data.iloc[1:][:]
     return data
-        
+
 # Rolling up both functions into a single function that can be executed using
 # a multi-threading approach--not currently using this approach
 def wholeShebang(station,year,month,cursor):
     stdmet=getData(station,year,month)
     insertStdMet(station,cursor,stdmet)
-    
+
 threads=[]
 for station in stations:
-#    for y in myyears:
+#    for y in myyears:o
 #        stdmet=getData(cur,station,y,0)
 #        insertStdMet(station,cur,stdmet)
     for m in mymonths:
