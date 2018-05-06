@@ -7,9 +7,9 @@
 """
 
 import requests
-import json
 from datetime import datetime as dt
 import pandas as pd
+import numpy as np
 
 
 class DataBuoy:
@@ -17,100 +17,150 @@ class DataBuoy:
    This class contains functions used to fetch and parse data from National Data Buoy Center stations.
 
   Attributes:
-    station_id (str): The numeric identifier of the data buoy whose data is to be gathered for plotting.
-    file_name (str): The name of the file to be generated when writing out data.
+    station_id (str): The numeric identifier of the data buoy this class will
+    represent.
+
 
    Methods/Functions:
-    stdmet_to_json: This function gathers (via HTTP GET request) the most recent standard meteorological summary from NDBC data buoy and converts the text file into a python dictionary which is then stringified into a JSON file.
+    get_stdmet(years, months): Collects standard meteorological summary data
+    for the time periods specified and stores it as a pandas dataframe in the
+    data attribute.
+
   """
 
-  __BASEURL__ = 'http://www.ndbc.noaa.gov/data/stdmet/{month}/{station}.txt'
+  # Defining some template strings as class variables that will be
+  # used to define specific data URLS for each instance.
+  STDMET_MONTHURL = 'https://www.ndbc.noaa.gov/data/stdmet/{month}/{station}.txt'
 
-  def __init__(self, station_id='46042', file_name='stdmet.json'):
+  STDMET_YEARURL = 'https://www.ndbc.noaa.gov/view_text_file.php?filename={station}h{year}.txt.gz&dir=data/historical/stdmet/'
+
+  def __init__(self, station_id='46042'):
+    """
+    An initializing function to set our default data.
+    """
+    self.station_id = station_id
+    self.data = {'stdmet': pd.DataFrame([])}
+
+  def __str__(self):
      """
-     An initializing function to set our default data.
+     Overriding the default __str__ method to be a bit more descriptive.
      """
-     self.station_id = station_id
-     self.file_name = file_name
+     return "NDBC.DataBuoy Object for Station " + self.station_id
 
-  def set_ndbc(self, station_id):
-     """
-     Allows interactive setting of NDBC station id.
+  def __checkurl__(self, url):
+    """
+    A simple encapsulation of using a HEAD request to check the validity of a
+    URL.
+    Args:
+       url(str) - the URL to checked
+    Returns:
+       url_is_valid(bool) - A boolean value indicating the validity of this URL
+    """
+    url_is_valid = False
+    res = requests.head(url)
+    if res.status_code == 200:
+      url_is_valid = True
+    return url_is_valid
 
-     Args:
-         station_id (str): The numeric station id for a specific data
-         buoy.
-     Returns:
-         None
-     """
-     self.station_id = station_id
+  def load_stdmet(self, url):
+    """
+    The function that does the actual loading of the stdmet data into the
+    instance data attribute.
+    """
+    year_types = ['YY', 'YYYY', '#YY']
+    data_df = pd.read_csv(url, '\s+')
+    # We check to see if the first row is the units - true after 2009.
+    if data_df.loc[0][0][0] == '#':
+      units = data_df.loc[0]
+      data_df = data_df.drop([0])
+    # Next we need to identify the columns relating to our datetime values.
+    dt_index_cols = ['#YY', 'MM', 'DD', 'hh']
+    dt_format_vals = {'#YY': '%Y', 'MM': '%m', 'DD': '%d', 'hh': '%H'}
+    if 'mm' in list(data_df.columns):
+      dt_index_cols.append('mm')
+      dt_format_vals['mm'] = '%M'
+    # Since we may be dealing with historical data files that were weird
+    # in their definition of year values
+    yt = [x for x in year_types if x in dt_index_cols][0]
+    dt_index_cols[0] = yt
+    # detecting a two digit year (this stopped around 1996)
+    if int(np.floor(np.log10(int(data_df[yt][1])) + 1)) == 2:
+      data_df[yt] = data_df[yt] + 1900
+    # Using our dictionary to build a formatting string for datetime
+    dt_format_str = ' '.join([dt_format_vals[x] for x in dt_index_cols])
+    # Setting the datetime component columns as our index
+    data_df.set_index(dt_index_cols, inplace=True)
+    # Converting tuples of date/time components from columns into Python datetime objects.
+    dt_vals = [dt.strptime(' '.join(x), dt_format_str)
+               for x in data_df.index.values]
+    # Setting our index to our datetime list
+    data_df.index = dt_vals
 
-  def set_outfile(self, filename):
-     """
-     Allows interactive setting of output file name.
+    self.data['stdmet'] = self.data['stdmet'].append(data_df)
 
-     Args:
-         filename: The name of the file to be returned by the
-         stdmet_to_json function.
-     Returns:
-         None
-     """
-     self.file_name = filename
+  def get_stdmet(self, years=[], months=[]):
+    """
+    Method for gathering the standard meteorological summary data from the
+    NDBC station represented by an instance of this class.  The years and
+    months arguments passed in define the years and months (of the current
+    year) for which data will be gathered.  This data will assigned as a
+    pandas dataframe to the instance attribute data['stdmet'].
+    Args:
+        year(list) - A list of years for which to collect data.
+        months(list) - A list of months of the current year for which to
+                       collect data.
+    Returns:
+        times_unavailable(str) - A string identifying the years/months for
+                                 which no data was collected.
 
+    If this function is called without either years or months, it is assumed
+    the user wishes to retrieve the most current month's data.
+    """
+    import pdb; pdb.set_trace()
+    recent = False
+    times_unavailable = ""
+    if not years and not months:
+      recent = True
 
-  def stdmet_to_json(self, orient='index', date_format='iso'):
-     """
-     This method uses the current date and the NDBC_DB value to collect
-     the most recent standard meteorological summary from the National
-     Data Buoy Center (NDBC).  It converts the text returned into a
-     Python dictionary which is then saved as a JSON file.  The
-     filename is set by the file_name property.
+    if recent:
+      month_num = dt.today().month
+      valid = False
+      # Looping through potentially available months.
+      while month_num >= 0 and not valid:
+        month_abbrv = dt(dt.today().year, month_num, 1).strftime('%b')
+        my_url = self.STDMET_MONTHURL.format(
+            month=month_abbrv, station=self.station_id)
+        valid = self.__checkurl__(my_url)
+        # TODO: Figure out how to deal with early January edge case without raising pontential for infinite loop.
+        times_unavailable += month_abbrv + " not available.\n "
+        month_num -= 1
 
-     Args:
-       orient: the orientation of the JSON object produced from the Pandas DataFrame.  Default is index.
-       date_format: The format of the datetime string that will be output to the JSON file.  Default is iso.
+      self.load_stdmet(my_url)
 
-     Returns:
-         None but file (identified by file_name) is saved to current directory.
-     """
+    else:
+      for year in years:
+        my_url = self.STDMET_YEARURL.format(station=self.station_id, year=year)
+        if self.__checkurl__(my_url):
+          self.load_stdmet(my_url)
+        else:
+          times_unavailable += 'Year ' + str(year) + ' not available.\n'
 
-     month_num = dt.today().month
+      for month in months:
+        month_abbrv = dt(dt.today().year, month, 1).strftime('%b')
+        my_url = self.STDMET_MONTHURL.format(
+            month=month_abbrv, station=self.station_id)
+        if self.__checkurl__(my_url):
+          self.load_stdmet(my_url)
+        else:
+          times_unavailable += month_abbrv + ' not available.\n'
 
-     url_is_valid = False
-     # Looping through potentially available months.
-     while month_num >=0 and not url_is_valid:
-         month_abbrv = dt(dt.today().year, month_num, 1).strftime('%b')
-         my_url = self.__BASEURL__.format(month=month_abbrv, station=self.station_id)
-         res = requests.head(my_url)
-         if res.status_code == 200:
-             data_df = pd.read_csv(my_url, '\s+')
-             url_is_valid = True
-         month_num -= 1
-    # Now we have our data in a pandas dataframe.  However, our first
-    # row is actually units and our datetime components are broken out
-    # into individual columns.  This is less than desirable as we might
-    # like to do some time series operations that expect datetime
-    # objects.
+    if len(times_unavailable) > 0:
+        return times_unavailable
 
-    # We check to make sure the first row is the units.
-     if data_df.loc[0][0][0] == '#':
-         units = data_df.loc[0]
-         data_df = data_df.drop([0]) # We need to remove this so our vector operations can proceed.
-     # Building a list of column names and a dictionary mapping them to
-     # string formatting parameters.
-     dt_index_cols = ['#YY', 'MM', 'DD', 'hh']
-     dt_format_vals = {'#YY': '%Y', 'MM': '%m', 'DD': '%d', 'hh': '%H'}
+  def stdmet_to_json(self, file_name, date_format='iso', orient='columns'):
+    """
+    A simple method for outputing the existing stdmet data to a json file
+    """
 
-     if 'mm' in list(data_df.columns):
-         dt_index_cols.append('mm')
-         dt_format_vals['mm'] = '%M'
-     # Using our dictionary to build a formatting string for datetime
-     dt_format_str = ' '.join([dt_format_vals[x] for x in dt_index_cols])
-
-     # Setting the datetime component columns as our index
-     data_df.set_index(dt_index_cols, inplace=True)
-     # Converting tuples of date/time components from columns into Python datetime objects.
-     dt_vals = [dt.strptime(' '.join(x), dt_format_str) for x in data_df.index.values]
-     # Setting our index to our datetime list
-     data_df.index = dt_vals
-     data_df.to_json(self.file_name, date_format=date_format, orient=orient)
+    self.data['stdmet'].to_json(
+        file_name, date_format=date_format, orient=orient)
