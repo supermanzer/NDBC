@@ -15,4 +15,4 @@ from and provide the user with methods to collect and analyze this data.
    * requests
    * datetime
    * pandas
-   * numpy
+   * math (standard library)

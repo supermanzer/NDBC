@@ -9,7 +9,7 @@
 import requests
 from datetime import datetime as dt
 import pandas as pd
-import numpy as np
+import math
 
 
 class DataBuoy:
@@ -56,11 +56,9 @@ class DataBuoy:
     Returns:
        url_is_valid(bool) - A boolean value indicating the validity of this URL
     """
-    url_is_valid = False
+
     res = requests.head(url)
-    if res.status_code == 200:
-      url_is_valid = True
-    return url_is_valid
+    return res.status_code == 200
 
   def load_stdmet(self, url):
     """
@@ -84,7 +82,7 @@ class DataBuoy:
     yt = [x for x in year_types if x in dt_index_cols][0]
     dt_index_cols[0] = yt
     # detecting a two digit year (this stopped around 1996)
-    if int(np.floor(np.log10(int(data_df[yt][1])) + 1)) == 2:
+    if int(np.floor(math.log(int(data_df[yt][1]),10) + 1)) == 2:
       data_df[yt] = data_df[yt] + 1900
     # Using our dictionary to build a formatting string for datetime
     dt_format_str = ' '.join([dt_format_vals[x] for x in dt_index_cols])
@@ -116,7 +114,6 @@ class DataBuoy:
     If this function is called without either years or months, it is assumed
     the user wishes to retrieve the most current month's data.
     """
-    import pdb; pdb.set_trace()
     recent = False
     times_unavailable = ""
     if not years and not months:
