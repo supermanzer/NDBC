@@ -13,9 +13,11 @@ setuptools.setup(
   author='C. Ryan Manzer',
   author_email='ryan@gensci.org',
   packages=setuptools.find_packages(),
-  classifiers = (
+  classifiers=(
     'Programming Language :: Python :: 3',
     'License :: OSI Approved :: MIT License',
     'Operating System :: OS Independent',
     ),
+  test_suite='nose.collector',
+  tests_require=['nose']
   )
