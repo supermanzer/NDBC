@@ -16,14 +16,9 @@ class DataBuoy(object):
   """
    This class contains functions used to fetch and parse data from
    National Data Buoy Center stations.
-#ADDITION HERE
-
-
   Example:
   ``
     >>>from NDBC.NDBC import DataBuoy
-
-
     >>>N42 = DataBuoy('46042')
     >>>N42.get_stdmet()
     'Jun not available.\n'
@@ -32,15 +27,14 @@ class DataBuoy(object):
 2018-04-30 23:50:00  309   9.6  11.6  2.84  ...    12.6  999.0  99.0  99.00
         ....
 2018-05-31 22:50:00  304   9.3  11.4  2.02  ...    12.8  999.0  99.0  99.00
-
 [742 rows x 13 columns]}
   ``
   """
 
   # Defining some template strings as class variables that will be
   # used to define specific data URLS for each instance.
-  STDMET_MONTHURL = 'https://www.ndbc.noaa.gov/data/stdmet/{month}/{station}.txt'
-
+  STDMET_MONTHURL_1 = 'https://www.ndbc.noaa.gov/data/stdmet/{month}/{station}.txt'
+  STDMET_MONTHURL = 'https://www.ndbc.noaa.gov/view_text_file.php?filename={station}{month_num}{year}.txt.gz&dir=data/stdmet/{month_abbrv}/'
   STDMET_YEARURL = 'https://www.ndbc.noaa.gov/view_text_file.php?filename={station}h{year}.txt.gz&dir=data/historical/stdmet/'
 
   def __init__(self, station_id=False) -> None:
@@ -49,14 +43,14 @@ class DataBuoy(object):
     :param station_id: Station identifier <- required for data access
     """
     if station_id:
-      self._station_id = str(station_id)
+      self.station_id = str(station_id)
     self.data = {'stdmet': pd.DataFrame([])}
 
   def __str__(self):
      """
      Overriding the default __str__ method to be a bit more descriptive.
      """
-     return "NDBC.DataBuoy Object for Station " + self._station_id
+     return "NDBC.DataBuoy Object for Station " + self.station_id
 
   def __checkurl__(self, url):
     """
@@ -79,19 +73,21 @@ class DataBuoy(object):
     year_types = ['YY', 'YYYY', '#YY']
     data_df = pd.read_csv(url, '\s+')
     # We check to see if the first row is the units - true after 2009.
-    if data_df.loc[0][0][0] == '#':
+    if '#' in str(data_df.loc[0][0]):
       units = data_df.loc[0]
       data_df = data_df.drop([0])
     # Next we need to identify the columns relating to our datetime values.
     dt_index_cols = ['#YY', 'MM', 'DD', 'hh']
-    dt_format_vals = {'#YY': '%Y', 'MM': '%m', 'DD': '%d', 'hh': '%H'}
     if 'mm' in list(data_df.columns):
       dt_index_cols.append('mm')
-      dt_format_vals['mm'] = '%M'
     # Since we may be dealing with historical data files that were weird
     # in their definition of year values
-    yt = [x for x in year_types if x in dt_index_cols][0]
+    yt = [x for x in year_types if x in data_df.columns][0]
     dt_index_cols[0] = yt
+    if 'mm' in list(data_df.columns):
+        dt_format_vals = {yt: '%Y', 'MM': '%m', 'DD': '%d', 'hh': '%H','mm':'%M'}
+    else:
+        dt_format_vals = {yt: '%Y', 'MM': '%m', 'DD': '%d', 'hh': '%H'}
     # detecting a two digit year (this stopped around 1996)
     if int(math.floor(math.log(int(data_df[yt][1]),10) + 1)) == 2:
       data_df[yt] = data_df[yt] + 1900
@@ -100,11 +96,13 @@ class DataBuoy(object):
     # Setting the datetime component columns as our index
     data_df.set_index(dt_index_cols, inplace=True)
     # Converting tuples of date/time components from columns into Python datetime objects.
-    dt_vals = [dt.strptime(' '.join(x), dt_format_str)
+    dt_vals = [dt.strptime(' '.join(str(v) for v in x), dt_format_str)
                for x in data_df.index.values]
     # Setting our index to our datetime list
     data_df.index = dt_vals
-
+    #For older data - rename wind direction column so it matches newer data and will merge seemlessly
+    if 'WD' in data_df.columns:
+        data_df.rename(columns={'WD':'WDIR'},inplace=True)
     self.data['stdmet'] = self.data['stdmet'].append(data_df)
 
   def get_stdmet(self, years=[], months=[]):
@@ -133,12 +131,12 @@ class DataBuoy(object):
       # Looping through potentially available months.
       while month_num >= 0 and not valid:
         month_abbrv = dt(dt.today().year, month_num, 1).strftime('%b')
-        my_url = self.STDMET_MONTHURL.format(
+        my_url = self.STDMET_MONTHURL_1.format(
             month=month_abbrv, station=self.station_id)
         valid = self.__checkurl__(my_url)
         # TODO (ryan@gensci.org): Figure out how to deal with early January edge case without raising pontential for infinite loop.
         if not valid:
-          times_unavailable += month_abbrv + " not available.\n "
+              times_unavailable += month_abbrv + " not available.\n "
         month_num -= 1
 
       self.load_stdmet(my_url)
@@ -153,12 +151,16 @@ class DataBuoy(object):
 
       for month in months:
         month_abbrv = dt(dt.today().year, month, 1).strftime('%b')
-        my_url = self.STDMET_MONTHURL.format(
-            month=month_abbrv, station=self.station_id)
+        year = dt.today().year
+        my_url = self.STDMET_MONTHURL.format(month_num=month,year=year,month_abbrv=month_abbrv, station=self.station_id)
         if self.__checkurl__(my_url):
           self.load_stdmet(my_url)
         else:
-          times_unavailable += month_abbrv + ' not available.\n'
+          my_url1 = self.STDMET_MONTHURL_1.format(month=month_abbrv, station=self.station_id)#Changed here!!!!
+          if self.__checkurl__(my_url1):
+              self.load_stdmet(my_url1)
+          else:
+              times_unavailable += month_abbrv + ' not available.\n'
 
     if len(times_unavailable) > 0:
         return times_unavailable
