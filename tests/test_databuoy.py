@@ -10,14 +10,14 @@ from unittest import TestCase
 
 from NDBC.NDBC import DataBuoy
 
-class DataBuoyTests(TestCase):
 
+class DataBuoyTests(TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.DB = DataBuoy(station_id='46042')
+        cls.DB = DataBuoy(station_id="46042")
 
     def test_instantiate_with_stationID(self):
-        data_buoy = DataBuoy('46042')
+        data_buoy = DataBuoy("46042")
         self.assertIsInstance(data_buoy, DataBuoy)
 
     def test_instantiate_without_stationID(self):
