@@ -31,8 +31,22 @@ class DataBuoyTests(TestCase):
 
     def test_datetime_conversion(self):
         self.DB.get_stdmet()
-        dt = self.DB.data[1].index.values
+        dt = self.DB.data['stdmet']['data'].iloc[1].name
         self.assertIsInstance(dt, datetime)
 
     def test_station_metadata(self):
+        self.DB.get_station_metadata()
         self.assertTrue(self.DB.station_info)
+        # Station 46042 has many attributes, let's make sure we got them all
+        self.assertTrue(all([
+            term in self.DB.station_info.keys()
+            for term in [
+                'lat', 'lon', 'Site elevation', 'Air temp height',
+                'Anemometer height', 'Barometer elevation', 'Sea temp depth',
+                'Water depth', 'Watch circle radius']
+        ]))
+
+    def test_badmetadata(self):
+        with self.assertRaises(LookupError):
+            db = DataBuoy()
+            db.get_station_metadata()
