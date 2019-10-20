@@ -6,7 +6,8 @@ with open("README.md", "r") as fh:
 setuptools.setup(
     name="NDBC",
     version="0.0.1",
-    description="A package to automate the loading of NDBC data to a custom object.",
+    description="A package to facilitate National Data Buoy Center (NDBC) "
+                "data exploration and automated workflows.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/GenSci/NDBC",
@@ -18,6 +19,6 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ),
-    test_suite="nose.collector",
-    tests_require=["nose"],
+    # test_suite="nose.collector",
+    # tests_require=["nose"],
 )
