@@ -3,16 +3,55 @@
 
 This repository represents my attempts to build out Python class(es)
 to facilitate the acquisition, analysis, and visualization of National
-Data Buoy Center (NDBC) data.  The goal is to build classes that can be
-easily used in oceanographic science scripting as well as a web
-framework like Django or Flask.
+Data Buoy Center (NDBC) data.  The goal is to develop a set of APIs to 
+facilitate rapid discovery of data resources, exploratory data analysis,
+and allow integration into automated data workflows.
 
 ## NDBC.py
 This file defines the DataBuoy class.  The purpose of this class is to
 allow a user to define a specific data buoy they wish to gather data
 from and provide the user with methods to collect and analyze this data.
- * Dependencies
-   * requests
-   * datetime
-   * pandas
-   * math (standard library)
+ 
+Dependencies are listed in `requirements.txt`
+   
+## Usage
+
+After importing, the DataBuoy class is instantiated with the ID of the 
+station from which historical data is sought.  Then data may be gathered for 
+the years and months specified.  If no time period is specified, the most recent
+full month available is retrieved.
+```
+from NDBC.NDBC import DataBuoy
+
+n42 = DataBuoy(46042)  # <- String or numeric station ids are valid
+
+n42.get_stdmet()  # <- no argumets so latest full month is retrieved.
+
+Oct not available.   # <- Where data is missing, messages are returned to the terminal via a logger.warning() call 
+Sep not available.   
+
+n42.data  # <- anticipating additional data collection methods, the .data property returns a dictionary.  Indiviudual
+               data products are returned as pandas DataFrame objects
+
+# Datetime objects are compiled from individual year, month, day, hour, minute columns and used as the index to support
+# slicing data by time frames. 
+
+{'stdmet':          WDIR WSPD  GST  WVHT    DPD   APD  MWD    PRES  ATMP  WTMP   DEWP   VIS   TIDE
+2019-07-31 23:50:00  298  3.6  5.2  1.25   7.69  5.37  303  1015.1  13.4  15.2  999.0  99.0  99.00
+2019-08-01 00:50:00  301  5.7  7.2  1.26   7.14  5.42  306  1014.8  13.4  15.3  999.0  99.0  99.00
+2019-08-01 01:50:00  323  6.6  8.3  1.33   7.14  5.47  312  1014.5  13.2  15.1  999.0  99.0  99.00
+2019-08-01 02:50:00  347  5.8  7.7  1.32   7.69  5.15  319  1014.5  12.7  15.1  999.0  99.0  99.00
+2019-08-01 03:50:00  353  5.6  7.2  1.26   7.69  5.31  325  1014.9  12.6  15.0  999.0  99.0  99.00
+...                  ...  ...  ...   ...    ...   ...  ...     ...   ...   ...    ...   ...    ...
+2019-08-31 18:50:00  999  6.2  7.4  0.87  13.79  4.67  186  1014.6  17.0  17.2  999.0  99.0  99.00
+2019-08-31 19:50:00  999  6.8  8.3  0.83  13.79  4.56  178  1014.2  17.2  17.3  999.0  99.0  99.00
+2019-08-31 20:50:00  999  6.5  7.8  0.89  13.79  4.38  195  1013.8  17.5  17.4  999.0  99.0  99.00
+2019-08-31 21:50:00  999  7.5  8.9  0.95  13.79  4.52  190  1013.1  17.5  17.3  999.0  99.0  99.00
+2019-08-31 22:50:00  999  8.0  9.4  0.95  13.79  4.09  171  1012.7  17.7  17.1  999.0  99.0  99.00
+
+[741 rows x 13 columns]}
+```
+Using the pandas DataFrame to store the returned data provides access to the wide array of methods the pandas package 
+provides.
+
+

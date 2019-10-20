@@ -13,6 +13,10 @@ from datetime import datetime as dt
 import pandas as pd
 import math
 
+from logging import getLogger
+
+logger = getLogger(__name__)
+
 
 class DataBuoy(object):
     """
@@ -145,11 +149,13 @@ class DataBuoy(object):
         # month for the given station.
         if not years and not months:
             month_num = dt.today().month
+            year = dt.today().year
             my_url = False
             # Looping through potentially available months.
             while month_num >= 0 and not my_url:
                 month_abbrv = dt(dt.today().year, month_num, 1).strftime("%b")
-                kws = {"month_abbrv": month_abbrv, "station": self.station_id}
+                kws = {"month_abbrv": month_abbrv, "month_num": month_num,
+                       "year": year, "station": self.station_id}
                 my_url = self.__checkurls__(
                     self.__buildurls__(self.stdmet_monthurls, kws)
                 )
@@ -188,7 +194,7 @@ class DataBuoy(object):
                     times_unavailable += month_abbrv + " not available.\n"
 
         if len(times_unavailable) > 0:
-            return times_unavailable
+            logger.warning(times_unavailable)
 
     def stdmet_to_json(self, file_name, date_format="iso", orient="columns"):
         """
