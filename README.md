@@ -60,7 +60,7 @@ from NDBC.NDBC import DataBuoy
 
 n42 = DataBuoy(46042)  # <- String or numeric station ids are valid
 
-n42.get_stdmet(datetime_index=True)  # <- no argumets so latest full month is retrieved.
+n42.get_stdmet(datetime_index=True)  # <- no year, month argumets so latest full month is retrieved.
 
 Oct not available.   # <- Where data is missing, messages are returned to the terminal via a logger.warning() call 
 Sep not available.   
