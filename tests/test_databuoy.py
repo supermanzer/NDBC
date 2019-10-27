@@ -12,9 +12,9 @@ from NDBC.NDBC import DataBuoy
 
 
 class DataBuoyTests(TestCase):
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls.DB = DataBuoy(station_id="46042")
+
+    def setUp(self) -> None:
+        self.DB = DataBuoy("46042")
 
     def test_instantiate_with_stationID(self):
         data_buoy = DataBuoy("46042")
@@ -29,9 +29,14 @@ class DataBuoyTests(TestCase):
         self.DB.get_stdmet()
         self.assertTrue(self.DB.data)
 
-    def test_datetime_conversion(self):
-        self.DB.get_stdmet()
+    def test_datetime_conversion_index(self):
+        self.DB.get_stdmet(datetime_index=True)
         dt = self.DB.data['stdmet']['data'].iloc[1].name
+        self.assertIsInstance(dt, datetime)
+
+    def test_datetime_conversion_column(self):
+        self.DB.get_stdmet()
+        dt = self.DB.data['stdmet']['data'].iloc[1]['datetime']
         self.assertIsInstance(dt, datetime)
 
     def test_station_metadata(self):

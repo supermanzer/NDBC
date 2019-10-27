@@ -16,16 +16,51 @@ Dependencies are listed in `requirements.txt`
    
 ## Usage
 
+#### Methods of DataBuoy Class
+`.set_station_id`
+
+If a DataBuoy class has been instantiated without any `station_id` argument, this method allows for setting a station id
+```
+from NDBC.NDBC import DataBuoy
+DB = DataBuoy()
+DB.set_station_id = '46042'
+```
+
+
+`.get_station_metadata()`
+
+Perform a scrape of the public webpage for a specified data station and save a dictionary of available metadata to the `.station_info` property.  This is only available if a DataBuoy has a valid `station_id` set (either during class instantiation or using 
+the `set_station_id` method).
+```
+from NDBC.NDBC import DataBuoy
+DB = DataBuoy(46042)
+DB.get_station_metadata()
+DB.station_info
+{   'Air temp height': '4 m above site elevation',
+    'Anemometer height': '5 m above site elevation',
+    'Barometer elevation': 'sea level',
+    'Sea temp depth': '0.6 m below water line',
+    'Site elevation': 'sea level',
+    'Watch circle radius': '1789 yards',
+    'Water depth': '1645.9 m',
+    'lat': '36.785 N',
+    'lon': '122.398 W'}
+```
+
+* `.get_stdmet(datetime_index=False)`
+
 After importing, the DataBuoy class is instantiated with the ID of the 
 station from which historical data is sought.  Then data may be gathered for 
 the years and months specified.  If no time period is specified, the most recent
 full month available is retrieved.
+
+The default behavior is to append datetime values built from date part columns (YY, MM, DD, etc.) to a column 'datetime'. If value `True` is passed as the `datetime_index` argument, the datetime values will be used as index values for the returned dataframe.  In some cases this is advantageous for time series analyses.  
 ```
 from NDBC.NDBC import DataBuoy
 
 n42 = DataBuoy(46042)  # <- String or numeric station ids are valid
 
-n42.get_stdmet()  # <- no argumets so latest full month is retrieved.
+n42.get_stdmet(datetime_index=True)  # <- no argumets so latest full month is retrieved.
 
 Oct not available.   # <- Where data is missing, messages are returned to the terminal via a logger.warning() call 
 Sep not available.   
