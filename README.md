@@ -16,6 +16,14 @@ Dependencies are listed in `requirements.txt`
    
 ## Usage
 
+#### Installation
+
+Install using pip from PyPI
+```
+pip install NDBC
+```
+Then you are ready to start using this module in exploratory data analyses and scripted workflows.
+
 #### Methods of DataBuoy Class
 `.set_station_id`
 
@@ -23,7 +31,7 @@ If a DataBuoy class has been instantiated without any `station_id` argument, thi
 ```
 from NDBC.NDBC import DataBuoy
 DB = DataBuoy()
-DB.set_station_id = '46042'
+DB.set_station_id('46042') # <- Either strings or numbers are acceptable
 ```
 
 
