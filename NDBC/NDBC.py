@@ -10,12 +10,12 @@
 
 import requests
 import pandas as pd
-import math
+import json
 import re
 
 from datetime import datetime as dt
 from bs4 import BeautifulSoup
-from typing import Union
+
 
 from logging import getLogger
 
@@ -78,7 +78,8 @@ class DataBuoy(object):
      """
         return "NDBC.DataBuoy Object for Station " + self._station_id
 
-    def __checkurls__(self, urls):
+    @staticmethod
+    def __check_urls__(urls):
         """
     Simple method to check list of urls, check if they return a 200 status
     code with a HEAD request, and return the first valid URL (if any).
@@ -92,7 +93,7 @@ class DataBuoy(object):
             return False
 
     @staticmethod
-    def __buildurls__(urls, format_kwargs):
+    def __build_urls__(urls, format_kwargs):
         return [url.format(**format_kwargs) for url in urls]
 
     def _parse_metadata(self, element, station_metadata=None):
@@ -269,8 +270,8 @@ class DataBuoy(object):
                 month_abbrv = dt(year_num, month_num, 1).strftime("%b")
                 kws = {"month_abbrv": month_abbrv, "month_num": month_num,
                        "station": self._station_id, "year": year_num}
-                my_url = self.__checkurls__(
-                    self.__buildurls__(self.stdmet_monthurls, kws)
+                my_url = self.__check_urls__(
+                    self.__build_urls__(self.stdmet_monthurls, kws)
                 )
                 if not my_url:
                     times_unavailable += month_abbrv + " not available.\n "
@@ -281,8 +282,8 @@ class DataBuoy(object):
         else:
             for year in years:
                 kws = {"year": year, "station": self._station_id}
-                my_url = self.__checkurls__(
-                    self.__buildurls__(self.stdmet_yearurls, kws)
+                my_url = self.__check_urls__(
+                    self.__build_urls__(self.stdmet_yearurls, kws)
                 )
                 if my_url:
                     self.load_stdmet(my_url, datetime_index)
@@ -298,8 +299,8 @@ class DataBuoy(object):
                     "month_num": month,
                     "station": self._station_id,
                 }
-                my_url = self.__checkurls__(
-                    self.__buildurls__(self.stdmet_monthurls, kws)
+                my_url = self.__check_urls__(
+                    self.__build_urls__(self.stdmet_monthurls, kws)
                 )
                 if my_url:
                     self.load_stdmet(my_url, datetime_index)
@@ -315,4 +316,12 @@ class DataBuoy(object):
         """
         self.data["stdmet"].to_json(file_name, date_format=date_format, orient=orient)
 
-    # TODO (ryan@gensci.org): Build out function to look for values that are all '9' and replace them with None or NaN to indicate lack of valid data.
+    # TODO (ryan@gensci.org): Build out function to look for values
+    #  that are all '9' and replace them with None or NaN to indicate
+    #  lack of valid data.
+
+    def save(self, filename=False, orient='records'):
+        file_name = filename if filename else f"data_buoy_" \
+                                              f"{self._station_id}.json"
+        # TODO (ryan@gensci.org): Determine how to iterate over all data
+        #  attributes and construct a dict object to write to JSON file.
