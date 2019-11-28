@@ -316,10 +316,10 @@ class DataBuoy(object):
         """
         self.data["stdmet"].to_json(file_name, date_format=date_format, orient=orient)
 
-    # TODO (ryan@gensci.org): Build otu function to look for values that are all '9' and replace then with None or NaN to indicate missing data
+    # TODO (ryan@gensci.org): Build out function to look for values that are all '9' and replace then with None or NaN to indicate missing data
 
     def save(self, filename=False, orient='records'):
         file_name = filename if filename else f"data_buoy_" \
                                               f"{self._station_id}.json"
-        # TODO (ryan@gensci.org): Determine how best to iterate over all data attributes and construct a dict object to writei to JSON file.
+        # TODO (ryan@gensci.org): Determine how best to iterate over all data attributes and construct a dict object to write to JSON file.
 
