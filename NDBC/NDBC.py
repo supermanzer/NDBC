@@ -44,9 +44,9 @@ class DataBuoy(object):
     BASE_URL = "https://www.ndbc.noaa.gov/"
     STATION_URL = BASE_URL + "station_page.php?station={}"
     # REGEX PATTERNS FOR PARSING HTML STATION PAGES
-    LAT_PAT = "\d+\.\d+\s+N"
-    LON_PAT = "\d+\.\d+\s+W"
-    ATTR_PAT = "<b>(.*):</b>\s*(.*)<br/>"
+    LAT_PAT = r"\d+\.\d+\s+N"
+    LON_PAT = r"\d+\.\d+\s+W"
+    ATTR_PAT = r"<b>(.*):</b>\s*(.*)<br/>"
     # Defining some template strings as class variables that will be
     # used to define specific data URLS for each instance.
     stdmet_monthurls = [
@@ -66,17 +66,17 @@ class DataBuoy(object):
     :param station_id: Station identifier <- required for data access
     """
         if station_id:
-            self._station_id = str(station_id)
+            self.station_id = str(station_id)
         self.data = {"stdmet": {}}
 
     def set_station_id(self, station_id):
-        self._station_id = str(station_id).upper()
+        self.station_id = str(station_id).upper()
 
     def __str__(self):
         """
      Overriding the default __str__ method to be a bit more descriptive.
      """
-        return "NDBC.DataBuoy Object for Station " + self._station_id
+        return "NDBC.DataBuoy Object for Station " + self.station_id
 
     @staticmethod
     def __check_urls__(urls):
@@ -121,9 +121,9 @@ class DataBuoy(object):
         Define method to capture and store station metadata
         :return: None
          """
-        if not hasattr(self, '_station_id'):
+        if not hasattr(self, 'station_id'):
             raise LookupError("No station ID provided")
-        response = requests.get(self.STATION_URL.format(self._station_id))
+        response = requests.get(self.STATION_URL.format(self.station_id))
         soup = BeautifulSoup(response.content, "html.parser")
         meta_div = soup.find("div", id="stn_metadata")
         if meta_div:
@@ -229,7 +229,7 @@ class DataBuoy(object):
         :param url: Location of text data
         :return: None
         """
-        data_df = pd.read_csv(url, "\s+")
+        data_df = pd.read_csv(url, r"\s+")
         # The first column name often contains a # symbol.
         rename_cols = {c: c.replace('#', '')
                        for c in data_df.columns
@@ -269,7 +269,7 @@ class DataBuoy(object):
             while month_num > 0 and not my_url:
                 month_abbrv = dt(year_num, month_num, 1).strftime("%b")
                 kws = {"month_abbrv": month_abbrv, "month_num": month_num,
-                       "station": self._station_id, "year": year_num}
+                       "station": self.station_id, "year": year_num}
                 my_url = self.__check_urls__(
                     self.__build_urls__(self.stdmet_monthurls, kws)
                 )
@@ -281,7 +281,7 @@ class DataBuoy(object):
                 self.load_stdmet(my_url, datetime_index)
         else:
             for year in years:
-                kws = {"year": year, "station": self._station_id}
+                kws = {"year": year, "station": self.station_id}
                 my_url = self.__check_urls__(
                     self.__build_urls__(self.stdmet_yearurls, kws)
                 )
@@ -297,7 +297,7 @@ class DataBuoy(object):
                     "year": year,
                     "month_abbrv": month_abbrv,
                     "month_num": month,
-                    "station": self._station_id,
+                    "station": self.station_id,
                 }
                 my_url = self.__check_urls__(
                     self.__build_urls__(self.stdmet_monthurls, kws)
@@ -314,12 +314,39 @@ class DataBuoy(object):
         """
         A simple method for returning the existing stdmet data to a json file
         """
-        self.data["stdmet"].to_json(file_name, date_format=date_format, orient=orient)
+        self.data["stdmet"]['data'].to_json(
+            file_name, date_format=date_format, orient=orient)
 
     # TODO (ryan@gensci.org): Build out function to look for values that are all '9' and replace then with None or NaN to indicate missing data
 
-    def save(self, filename=False, orient='records'):
+    def save(self, filename=False, orient='records', date_format='iso'):
         file_name = filename if filename else f"data_buoy_" \
-                                              f"{self._station_id}.json"
-        # TODO (ryan@gensci.org): Determine how best to iterate over all data attributes and construct a dict object to write to JSON file.
+                                              f"{self.station_id}.json"
+        # Converting stdmet data attribute to JSON for object serialization
+        if self.data['stdmet']:
+            self.data['stdmet']['meta']['orient'] = orient
+            self.data['stdmet']['meta']['date_format'] = date_format
+            self.data['stdmet']['data'] = self.data['stdmet']['data'].to_json(
+                                            orient=orient,
+                                            date_format=date_format)
+        # converting object attributes to a dictionary
+        obj_vals = self.__dict__
+        # Converting our dictionary to a valid JSON string
+        obj_str = json.dumps(obj_vals)
+        # Writing our data to the filename specified
+        with open(file_name, 'w+') as f:
+            f.write(obj_str)
 
+    @classmethod
+    def load(cls, filename):
+        file_str = open(filename, 'r').read()
+        obj = json.loads(file_str)
+        if obj['data']['stdmet'].get('data',False):
+            orient = obj['data']['stdmet']['meta']['orient']
+            obj['data']['stdmet']['data'] = pd.read_json(
+                                            obj['data']['stdmet']['data'],
+                                            orient=orient)
+        inst = cls()
+        for k, v in obj.items():
+            inst.__setattr__(k, v)
+        return inst
