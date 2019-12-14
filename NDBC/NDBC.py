@@ -12,6 +12,7 @@ import requests
 import pandas as pd
 import json
 import re
+import numpy as np
 
 from datetime import datetime as dt
 from bs4 import BeautifulSoup
@@ -95,6 +96,30 @@ class DataBuoy(object):
     @staticmethod
     def __build_urls__(urls, format_kwargs):
         return [url.format(**format_kwargs) for url in urls]
+
+    @staticmethod
+    def _bad_data_func(x, n):
+        """
+        Check an individual value from NDBC data files to see if it meets the
+        standard for NDBC bad data flag.
+        :param x: The value being checked
+        :param n: the max length of the values for a given metric.
+        :return: Value if valid, None if not.
+        """
+        val = np.NaN if all([d == '9' for d in str(int(float(x)))]) and len(
+            x) == n else x
+        return val
+
+    def _bad_data_check(self, df, datetime_index):
+        """Replace NDBC bad data flag with NumPy NaN"""
+        cols = df.columns.to_list()
+        if not datetime_index:
+            cols.remove('datetime')
+
+        for col in cols:
+            n = len(df[col].max())
+            df[col] = df[col].apply(self._bad_data_func, n=n)
+        return df
 
     def _parse_metadata(self, element, station_metadata=None):
         """
@@ -242,6 +267,8 @@ class DataBuoy(object):
         data_df = self.__separate_units(data_df)
         # Building and appending datetimes from date parts
         data_df = self._add_datetime(data_df, datetime_index)
+        # Replacing NDBC bad data flags with Numpy NaNs
+        data_df = self._bad_data_check(data_df, datetime_index)
         # Append to existing stdmet dataframe if exists
         if "data" in self.data["stdmet"].keys():
             self.data["stdmet"]["data"] = self.data["stdmet"]["data"].append(
@@ -316,8 +343,6 @@ class DataBuoy(object):
         """
         self.data["stdmet"]['data'].to_json(
             file_name, date_format=date_format, orient=orient)
-
-    # TODO (ryan@gensci.org): Build out function to look for values that are all '9' and replace then with None or NaN to indicate missing data
 
     def save(self, filename=False, orient='records', date_format='iso'):
         file_name = filename if filename else f"data_buoy_" \
