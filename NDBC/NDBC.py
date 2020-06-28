@@ -288,54 +288,64 @@ class DataBuoy(object):
         times_unavailable = ""
         # If no time frame is specified we retrieve the most current complete
         # month for the given station.
-        if not years and not months:
-            month_num = dt.today().month
-            year_num = dt.today().year
-            my_url = False
-            # Looping through potentially available months.
-            while month_num > 0 and not my_url:
-                month_abbrv = dt(year_num, month_num, 1).strftime("%b")
-                kws = {"month_abbrv": month_abbrv, "month_num": month_num,
-                       "station": self.station_id, "year": year_num}
-                my_url = self.__check_urls__(
-                    self.__build_urls__(self.stdmet_monthurls, kws)
-                )
-                if not my_url:
-                    times_unavailable += month_abbrv + " not available.\n "
+        try:
+            if not years and not months:
+                month_num = dt.today().month
+                year_num = dt.today().year
+                my_url = False
+                # Looping through potentially available months.
+                while not my_url:
+                    month_abbrv = dt(year_num, month_num, 1).strftime("%b")
+                    kws = {"month_abbrv": month_abbrv, "month_num": month_num,
+                           "station": self.station_id, "year": year_num}
+                    my_url = self.__check_urls__(
+                        self.__build_urls__(self.stdmet_monthurls, kws)
+                    )
+                    if not my_url:
+                        times_unavailable += f"{month_abbrv} {year_num} not " \
+                                             f"available.\n "
 
-                month_num -= 1
-            if my_url:
-                self.load_stdmet(my_url, datetime_index)
-        else:
-            for year in years:
-                kws = {"year": year, "station": self.station_id}
-                my_url = self.__check_urls__(
-                    self.__build_urls__(self.stdmet_yearurls, kws)
-                )
+                    month_num -= 1
+                    # !st attempt to deal with January edge case
+                    if month_num == 0:
+                        year_num -= 1
+                        month_num = 12
                 if my_url:
                     self.load_stdmet(my_url, datetime_index)
-                else:
-                    times_unavailable += "Year " + str(year) + " not available.\n"
+            else:
+                for year in years:
+                    kws = {"year": year, "station": self.station_id}
+                    my_url = self.__check_urls__(
+                        self.__build_urls__(self.stdmet_yearurls, kws)
+                    )
+                    if my_url:
+                        self.load_stdmet(my_url, datetime_index)
+                    else:
+                        times_unavailable += "Year " + str(year) + " not available.\n"
 
-            for month in months:
-                month_abbrv = dt(dt.today().year, month, 1).strftime("%b")
-                year = dt.today().year
-                kws = {
-                    "year": year,
-                    "month_abbrv": month_abbrv,
-                    "month_num": month,
-                    "station": self.station_id,
-                }
-                my_url = self.__check_urls__(
-                    self.__build_urls__(self.stdmet_monthurls, kws)
-                )
-                if my_url:
-                    self.load_stdmet(my_url, datetime_index)
-                else:
-                    times_unavailable += month_abbrv + " not available.\n"
+                for month in months:
+                    month_abbrv = dt(dt.today().year, month, 1).strftime("%b")
+                    year = dt.today().year
+                    kws = {
+                        "year": year,
+                        "month_abbrv": month_abbrv,
+                        "month_num": month,
+                        "station": self.station_id,
+                    }
+                    my_url = self.__check_urls__(
+                        self.__build_urls__(self.stdmet_monthurls, kws)
+                    )
+                    if my_url:
+                        self.load_stdmet(my_url, datetime_index)
+                    else:
+                        times_unavailable += month_abbrv + " not available.\n"
 
-        if len(times_unavailable) > 0:
-            logger.warning(times_unavailable)
+            if len(times_unavailable) > 0:
+                logger.warning(times_unavailable)
+
+        except requests.exceptions.SSLError as e:
+            logger.error(f'NDBC Server unavailable: {e}')
+
 
     # -------------------- STATION SEARCH METHODS ------------------------------
     # https: // www.ndbc.noaa.gov / radial_search.php?lat1 = 36.79 & lon1 = \
