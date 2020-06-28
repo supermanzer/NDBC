@@ -272,12 +272,12 @@ class DataBuoy(object):
         # Append to existing stdmet dataframe if exists
         if "data" in self.data["stdmet"].keys():
             self.data["stdmet"]["data"] = self.data["stdmet"]["data"].append(
-                                                                        data_df)
+                data_df)
         # otherwise assign dataframe to stdment['data']
         else:
             self.data["stdmet"]["data"] = data_df
 
-    def get_stdmet(self, years=False, months=False,
+    def get_stdmet(self, years=[], months=[],
                    datetime_index=False) -> None:
         """
         Identify valid data files to append to stdmet data and call load_std()
@@ -321,7 +321,8 @@ class DataBuoy(object):
                     if my_url:
                         self.load_stdmet(my_url, datetime_index)
                     else:
-                        times_unavailable += "Year " + str(year) + " not available.\n"
+                        times_unavailable += "Year " + \
+                            str(year) + " not available.\n"
 
                 for month in months:
                     month_abbrv = dt(dt.today().year, month, 1).strftime("%b")
@@ -346,7 +347,6 @@ class DataBuoy(object):
         except requests.exceptions.SSLError as e:
             logger.error(f'NDBC Server unavailable: {e}')
 
-
     # -------------------- STATION SEARCH METHODS ------------------------------
     # https: // www.ndbc.noaa.gov / radial_search.php?lat1 = 36.79 & lon1 = \
       #  -122.4 & uom = M & dist = 50 & ot = B & time = -1
@@ -368,7 +368,7 @@ class DataBuoy(object):
     }
     UOMS = {
         'metric': "M",
-        'english':"E"
+        'english': "E"
     }
     OBS_TYPES = {
         'buoy': "B",
@@ -463,7 +463,7 @@ class DataBuoy(object):
         lat1, lon1 = self._ss_args_check(search_type, lat1, lat2, lon1, lon2,
                                          uom, time, obs_type, distance)
         # OKAY, LET'S BEGIN
-        url = self._ss_build_url(search_type,lat1, lat2, lon1, lon2, uom,
+        url = self._ss_build_url(search_type, lat1, lat2, lon1, lon2, uom,
                                  time, obs_type, distance)
         ids = self._ss_parse_response(url)
         return ids
@@ -484,8 +484,8 @@ class DataBuoy(object):
             self.data['stdmet']['meta']['orient'] = orient
             self.data['stdmet']['meta']['date_format'] = date_format
             self.data['stdmet']['data'] = self.data['stdmet']['data'].to_json(
-                                            orient=orient,
-                                            date_format=date_format)
+                orient=orient,
+                date_format=date_format)
         # converting object attributes to a dictionary
         obj_vals = self.__dict__
         # Converting our dictionary to a valid JSON string
@@ -498,11 +498,11 @@ class DataBuoy(object):
     def load(cls, filename):
         file_str = open(filename, 'r').read()
         obj = json.loads(file_str)
-        if obj['data']['stdmet'].get('data',False):
+        if obj['data']['stdmet'].get('data', False):
             orient = obj['data']['stdmet']['meta']['orient']
             obj['data']['stdmet']['data'] = pd.read_json(
-                                            obj['data']['stdmet']['data'],
-                                            orient=orient)
+                obj['data']['stdmet']['data'],
+                orient=orient)
         inst = cls()
         for k, v in obj.items():
             inst.__setattr__(k, v)
