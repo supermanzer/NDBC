@@ -1,0 +1,9 @@
+[SETTINGS]
+# Identifying which files to scan by their extension
+file_ext = .py
+
+# Ignoring specific files
+files_to_ignore = setup.py
+
+# Ignoring directories
+dirs_to_ignore = venv, tests, dist, .tox
