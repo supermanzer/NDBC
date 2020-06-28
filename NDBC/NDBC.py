@@ -288,55 +288,187 @@ class DataBuoy(object):
         times_unavailable = ""
         # If no time frame is specified we retrieve the most current complete
         # month for the given station.
-        if not years and not months:
-            month_num = dt.today().month
-            year_num = dt.today().year
-            my_url = False
-            # Looping through potentially available months.
-            while month_num > 0 and not my_url:
-                month_abbrv = dt(year_num, month_num, 1).strftime("%b")
-                kws = {"month_abbrv": month_abbrv, "month_num": month_num,
-                       "station": self.station_id, "year": year_num}
-                my_url = self.__check_urls__(
-                    self.__build_urls__(self.stdmet_monthurls, kws)
-                )
-                if not my_url:
-                    times_unavailable += month_abbrv + " not available.\n "
+        try:
+            if not years and not months:
+                month_num = dt.today().month
+                year_num = dt.today().year
+                my_url = False
+                # Looping through potentially available months.
+                while not my_url:
+                    month_abbrv = dt(year_num, month_num, 1).strftime("%b")
+                    kws = {"month_abbrv": month_abbrv, "month_num": month_num,
+                           "station": self.station_id, "year": year_num}
+                    my_url = self.__check_urls__(
+                        self.__build_urls__(self.stdmet_monthurls, kws)
+                    )
+                    if not my_url:
+                        times_unavailable += f"{month_abbrv} {year_num} not " \
+                                             f"available.\n "
 
-                month_num -= 1
-            if my_url:
-                self.load_stdmet(my_url, datetime_index)
-        else:
-            for year in years:
-                kws = {"year": year, "station": self.station_id}
-                my_url = self.__check_urls__(
-                    self.__build_urls__(self.stdmet_yearurls, kws)
-                )
+                    month_num -= 1
+                    # !st attempt to deal with January edge case
+                    if month_num == 0:
+                        year_num -= 1
+                        month_num = 12
                 if my_url:
                     self.load_stdmet(my_url, datetime_index)
-                else:
-                    times_unavailable += "Year " + str(year) + " not available.\n"
+            else:
+                for year in years:
+                    kws = {"year": year, "station": self.station_id}
+                    my_url = self.__check_urls__(
+                        self.__build_urls__(self.stdmet_yearurls, kws)
+                    )
+                    if my_url:
+                        self.load_stdmet(my_url, datetime_index)
+                    else:
+                        times_unavailable += "Year " + str(year) + " not available.\n"
 
-            for month in months:
-                month_abbrv = dt(dt.today().year, month, 1).strftime("%b")
-                year = dt.today().year
-                kws = {
-                    "year": year,
-                    "month_abbrv": month_abbrv,
-                    "month_num": month,
-                    "station": self.station_id,
-                }
-                my_url = self.__check_urls__(
-                    self.__build_urls__(self.stdmet_monthurls, kws)
-                )
-                if my_url:
-                    self.load_stdmet(my_url, datetime_index)
-                else:
-                    times_unavailable += month_abbrv + " not available.\n"
+                for month in months:
+                    month_abbrv = dt(dt.today().year, month, 1).strftime("%b")
+                    year = dt.today().year
+                    kws = {
+                        "year": year,
+                        "month_abbrv": month_abbrv,
+                        "month_num": month,
+                        "station": self.station_id,
+                    }
+                    my_url = self.__check_urls__(
+                        self.__build_urls__(self.stdmet_monthurls, kws)
+                    )
+                    if my_url:
+                        self.load_stdmet(my_url, datetime_index)
+                    else:
+                        times_unavailable += month_abbrv + " not available.\n"
 
-        if len(times_unavailable) > 0:
-            logger.warning(times_unavailable)
+            if len(times_unavailable) > 0:
+                logger.warning(times_unavailable)
 
+        except requests.exceptions.SSLError as e:
+            logger.error(f'NDBC Server unavailable: {e}')
+
+
+    # -------------------- STATION SEARCH METHODS ------------------------------
+    # https: // www.ndbc.noaa.gov / radial_search.php?lat1 = 36.79 & lon1 = \
+      #  -122.4 & uom = M & dist = 50 & ot = B & time = -1
+    # URL generated for radial search lat = 36.79, lon = -122.4,
+    # uom = Metric, distance = 50 km, observation type = moored buoy, time =
+    # t - 1 hour
+
+    # https: // www.ndbc.noaa.gov / radial_search.php?lat1 = 36.79 & lon1 =
+    # -122.4 & uom = E & dist = 50 & ot = B & time = 1
+    # URL generated for radial search with uom = English, distance = 50
+    # miles, observation type = moored buoy, time = within the past 1 hour.
+
+    # https://www.ndbc.noaa.gov/box_search.php?lat1=36.785+N&lat2=37.125+N&
+    # lon1=-122.4&lon2=-121.4&uom=M&ot=A&time=1
+    # URL box search with Metric measurements in the past hour
+    SEARCH_TYPES = {
+        'radial': 'radial_search.php',
+        'box': 'box_search.php'
+    }
+    UOMS = {
+        'metric': "M",
+        'english':"E"
+    }
+    OBS_TYPES = {
+        'buoy': "B",
+        'ship': 'S',
+        'all': 'A'
+    }
+
+    def _ss_args_check(self, search_type='radial', lat1=False,
+                       lat2=False, lon1=False, lon2=False, uom='metric',
+                       time=1, obs_type='buoy', distance=False):
+        """Station Search arguments checking"""
+        if search_type not in self.SEARCH_TYPES.keys():
+            raise ValueError(f'Invalid search type. Please use one of the '
+                             f'following: {", ".join(self.SEARCH_TYPES.keys())}')
+        if uom not in self.UOMS.keys():
+            msg = f'Invalid UOM. Please use one of the following: ' \
+                  f'{", ".join(self.UOMS.keys())}'
+            raise ValueError(msg)
+        if obs_type not in self.OBS_TYPES.keys():
+            msg = f'Invalid observation type.  Please use one of the ' \
+                  f'following: {", ".join(self.OBS_TYPES.keys())}'
+            raise ValueError(msg)
+        if type(time) != int or abs(time) > 23:
+            raise ValueError('Time arg must be an integer with an absolute '
+                             'value of 23 or less.')
+        # ASSIGNING LAT1 AND LON1
+        lat1 = lat1 if lat1 else (self.station_info['lat'] if self.station_info[
+            'lat'] else False)
+        lon1 = lon1 if lon1 else (self.station_info['lon'] if self.station_info[
+            'lon'] else False)
+
+        # VALIDATING COORDINATES/ARGS FOR SEARCH TYPES
+        if search_type == 'radial' and not all([lat1, lon1, distance]):
+            raise ValueError('Radial search requires lat, lon, and distance.')
+        if search_type == 'box' and not all([lat1, lat2, lon1, lon2]):
+            raise ValueError('Box search requires two lat and lon pairs.')
+
+        return lat1, lon1
+
+    def _ss_build_url(
+            self, search_type, lat1, lat2=False, lon1=False, lon2=False,
+            uom='metric', time=1, obs_type='buoy', distance=False):
+
+        search_url = f'{self.BASE_URL}{self.SEARCH_TYPES[search_type]}?'
+
+        if search_type == 'radial':
+            search_url += f'lat1={lat1}&lon1={lon1}&uom=' \
+                          f'{self.UOMS[uom]}&dist={distance}&ot=' \
+                          f'{self.OBS_TYPES[obs_type]}&time={time}'
+        elif search_type == 'box':
+            search_url += f'lat1={lat1}&lat2={lat2}&lon1={lon1}&lon2={lon2}'
+            search_url += f'&uom={self.UOMS[uom]}&ot={self.OBS_TYPES[obs_type]}'
+            search_url += f'&time={time}'
+
+        return search_url
+
+    def _ss_parse_response(self, url):
+        """
+        Make request using URL provided and parse the response for a list of
+        unique station IDs.
+        """
+        response = requests.get(url)
+        # Checking the validity of our response
+        if response.status_code != 200:
+            raise ValueError(f'The url generated \n {url} \n returned a '
+                             f'status code of {response.status_code}')
+        # Parsing the HTML returned
+        soup = BeautifulSoup(response.content, 'html.parser')
+        # The station IDs returned by this search are all contained within
+        # <a> elements that include links to the station pages.  We can use
+        # this to find them.
+        station_anchors = soup.find_all(href=re.compile('station_page.php'))
+        station_ids = set([a.text for a in station_anchors if int(a.text) !=
+                           int(self.station_id)])
+        return station_ids
+
+    def station_search(self, search_type='radial', lat1=False,
+                       lat2=False, lon1=False, lon2=False, uom='metric',
+                       time=1, obs_type='buoy', distance=False):
+        """
+        Station search function.  Defaults to radial search.  Uses lat/lon
+        coordinates if supplied, otherwise will default to the coordinates of
+        the DataBuoy instance (if available).  UOM determines which distance
+        unit is used (defaults to metric) and time determines the time offset
+        in which measurements must have occurred for a station to be
+        included.  Obs_type determines the type of stations to be included (
+        buoy: moored buoy, ship: Ships and drifters, all: All station types).
+        Distance determines how wide an area to include (only applies to
+        radial search).
+        """
+        # CHECKING ARGS BEFORE WE START DOING ANYTHING FANCY
+        lat1, lon1 = self._ss_args_check(search_type, lat1, lat2, lon1, lon2,
+                                         uom, time, obs_type, distance)
+        # OKAY, LET'S BEGIN
+        url = self._ss_build_url(search_type,lat1, lat2, lon1, lon2, uom,
+                                 time, obs_type, distance)
+        ids = self._ss_parse_response(url)
+        return ids
+
+    # ------------------ DATA PERSISTENCE METHODS -----------------------------
     def stdmet_to_json(self, file_name, date_format="iso", orient="columns"):
         """
         A simple method for returning the existing stdmet data to a json file
