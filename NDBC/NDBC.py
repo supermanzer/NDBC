@@ -42,6 +42,20 @@ class DataBuoy(object):
   ``
   """
 
+    # DEFINING CONSTANTS
+    SEARCH_TYPES = {
+        'radial': 'radial_search.php',
+        'box': 'box_search.php'
+    }
+    UOMS = {
+        'metric': "M",
+        'english': "E"
+    }
+    OBS_TYPES = {
+        'buoy': "B",
+        'ship': 'S',
+        'all': 'A'
+    }
     BASE_URL = "https://www.ndbc.noaa.gov/"
     STATION_URL = BASE_URL + "station_page.php?station={}"
     # REGEX PATTERNS FOR PARSING HTML STATION PAGES
@@ -61,6 +75,7 @@ class DataBuoy(object):
         "station}h{year}.txt.gz&dir=data/historical/stdmet/"
     ]
 
+    # DEFINING METHODS
     def __init__(self, station_id=False) -> None:
         """
     Initialize object instance
@@ -70,14 +85,22 @@ class DataBuoy(object):
             self.station_id = str(station_id)
         self.data = {"stdmet": {}}
 
-    def set_station_id(self, station_id):
-        self.station_id = str(station_id).upper()
-
     def __str__(self):
         """
-     Overriding the default __str__ method to be a bit more descriptive.
-     """
+         Overriding the default __str__ method to be a bit more descriptive.
+         """
         return "NDBC.DataBuoy Object for Station " + self.station_id
+
+    def __repr__(self):
+        """
+        Matching __str__ format
+        :return: string
+        """
+        return self.__str__()
+
+
+    def set_station_id(self, station_id):
+        self.station_id = str(station_id).upper()
 
     @staticmethod
     def __check_urls__(urls):
@@ -326,11 +349,14 @@ class DataBuoy(object):
 
                 for month in months:
                     month_abbrv = dt(dt.today().year, month, 1).strftime("%b")
-                    year = dt.today().year
+                    # Adjusting for month wrapping cases (e.g. wanting December monthly data in January).
+                    year = dt.today().year if month <= dt.today().month else dt.today().year -1
+                    # When using the 2nd of the stdmet_monthurl patterns, two digit
+                    # month numbers are converted into the letters a, b, and c.
                     kws = {
                         "year": year,
                         "month_abbrv": month_abbrv,
-                        "month_num": month,
+                        "month_num": month if month < 10 else chr(97 + (month - 10)),
                         "station": self.station_id,
                     }
                     my_url = self.__check_urls__(
@@ -362,19 +388,6 @@ class DataBuoy(object):
     # https://www.ndbc.noaa.gov/box_search.php?lat1=36.785+N&lat2=37.125+N&
     # lon1=-122.4&lon2=-121.4&uom=M&ot=A&time=1
     # URL box search with Metric measurements in the past hour
-    SEARCH_TYPES = {
-        'radial': 'radial_search.php',
-        'box': 'box_search.php'
-    }
-    UOMS = {
-        'metric': "M",
-        'english': "E"
-    }
-    OBS_TYPES = {
-        'buoy': "B",
-        'ship': 'S',
-        'all': 'A'
-    }
 
     def _ss_args_check(self, search_type='radial', lat1=False,
                        lat2=False, lon1=False, lon2=False, uom='metric',
