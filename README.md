@@ -75,7 +75,7 @@ from NDBC.NDBC import DataBuoy
 
 n42 = DataBuoy(46042)  # <- String or numeric station ids are valid
 
-n42.get_stdmet(datetime_index=True)  # <- no year, month argumets so latest full month is retrieved.
+n42.get_data(datetime_index=True)  # <- no year, month argumets so latest full month is retrieved. Default data type is 'stdmet'
 
 Oct not available.   # <- Where data is missing, messages are returned to the terminal via a logger.warning() call
 Sep not available.
@@ -102,26 +102,30 @@ n42.data  # <- anticipating additional data collection methods, the .data proper
 [741 rows x 13 columns]}
 ```
 
-By default the `get_stdmet` function will fetch the most current month's data. However, the function can take lists of years & months ([int]) to specify a timeframe.
+By default the `get_data()` function will fetch the most current month's data. However, the function can take lists of years & months ([int]) to specify a timeframe.
 
 ```
-n42 = NDBC.DataBuoy('46042')
-n42.get_stdmet(years=range(2010, 20202), datetime_index=True)
-n42.data['stdmet']['data']
-                    WDIR WSPD  GST  WVHT    DPD   APD  MWD    PRES  ATMP  WTMP  DEWP  VIS  TIDE
-2009-12-31 23:50:00  126  3.3  4.4  1.58  11.43  8.42  281  1026.3   NaN  13.1   NaN  NaN   NaN
-2010-01-01 00:50:00  240  0.7  1.0  1.80  11.43  8.72  289  1026.8   NaN  13.1   NaN  NaN   NaN
-2010-01-01 01:50:00  180  0.1  0.4  1.64  12.12  8.76  286  1027.2   NaN  13.0   NaN  NaN   NaN
-2010-01-01 02:50:00   94  2.2  3.0  1.66  11.43  8.66  281  1027.4   NaN  13.0   NaN  NaN   NaN
-2010-01-01 03:50:00   91  0.9  1.5  1.48  12.12  8.43  277  1028.1   NaN  13.0   NaN  NaN   NaN
-...                  ...  ...  ...   ...    ...   ...  ...     ...   ...   ...   ...  ...   ...
-2019-12-31 23:10:00  323  5.5  7.7   NaN    NaN   NaN  NaN  1020.5  13.5  13.7  11.8  NaN   NaN
-2019-12-31 23:20:00  323  4.7  6.4   NaN    NaN   NaN  NaN  1020.3  13.6  13.7  11.9  NaN   NaN
-2019-12-31 23:30:00  321  4.1  6.2   NaN    NaN   NaN  NaN  1020.2  13.6  13.7  11.9  NaN   NaN
-2019-12-31 23:40:00  316  4.4  6.8  3.82  13.79  9.82  290  1020.1  13.6  13.7  11.8  NaN   NaN
-2019-12-31 23:50:00  315  4.5  6.9   NaN    NaN   NaN  NaN  1020.2  13.6  13.7  11.9  NaN   NaN
+>>> n42 = NDBC.DataBuoy('46042')
+>>> n42.get_data(months=[1,2], years=range(2019, 2020), datetime_index=True, data_type='swden)
+Year 2019 not available.
+Year 2020 not available.
+ 
+>>> n42.data
+{'swden': {'data':                      .0200  .0325  .0375  .0425  .0475  .0525  .0575  .0625  .0675  .0725  .0775  .0825  .0875  ...  .3000  .3100  .3200  .3300  .3400  .3500  .3650  .3850  .4050  .4250  .4450  .4650  .4850
+2021-01-01 00:40:00    0.0    0.0    0.0   0.00   1.17   9.11  24.25  24.95  15.84  20.44  26.48  20.63  12.72  ...   0.28   0.31   0.19   0.20   0.13   0.07   0.06   0.05   0.03   0.01   0.01   0.00    0.0
+2021-01-01 01:40:00    0.0    0.0    0.0   0.00   0.00  13.76  26.55  22.40  24.12  30.09  23.41  15.74  14.95  ...   0.25   0.16   0.12   0.16   0.06   0.16   0.06   0.03   0.05   0.02   0.01   0.00    0.0
+2021-01-01 02:40:00    0.0    0.0    0.0   0.00   0.93   4.40  16.03  33.95  41.48  38.02  31.47  18.88  14.59  ...   0.21   0.15   0.18   0.14   0.14   0.10   0.07   0.05   0.03   0.02   0.01   0.00    0.0
+2021-01-01 03:40:00    0.0    0.0    0.0   0.07   1.14   6.95  27.94  45.68  41.92  30.11  25.03  19.52  10.93  ...   0.22   0.20   0.16   0.09   0.08   0.15   0.09   0.04   0.02   0.01   0.00   0.01    0.0
+2021-01-01 04:40:00    0.0    0.0    0.0   0.00   0.76   3.64  11.23  18.23  29.84  27.19  12.85  11.20   9.77  ...   0.13   0.17   0.14   0.16   0.08   0.08   0.07   0.08   0.05   0.01   0.01   0.00    0.0
+...                    ...    ...    ...    ...    ...    ...    ...    ...    ...    ...    ...    ...    ...  ...    ...    ...    ...    ...    ...    ...    ...    ...    ...    ...    ...    ...    ...
+2021-02-28 19:40:00    0.0    0.0    0.0   0.00   0.00   0.00   0.06   0.25   1.42   2.50   9.48  11.48   8.46  ...   0.21   0.13   0.11   0.08   0.10   0.04   0.02   0.02   0.03   0.01   0.00   0.00    0.0
+2021-02-28 20:40:00    0.0    0.0    0.0   0.02   0.05   0.08   0.24   1.02   3.97   4.97   4.99   8.31  10.09  ...   0.21   0.07   0.09   0.06   0.05   0.10   0.04   0.03   0.01   0.01   0.00   0.00    0.0
+2021-02-28 21:40:00    0.0    0.0    0.0   0.00   0.00   0.15   0.30   0.36   1.63   4.18   6.85   7.82   7.98  ...   0.12   0.11   0.09   0.08   0.04   0.05   0.06   0.02   0.01   0.01   0.00   0.00    0.0
+2021-02-28 22:40:00    0.0    0.0    0.0   0.00   0.01   0.09   0.10   0.32   2.84   3.82   3.91   4.92   5.17  ...   0.17   0.09   0.13   0.05   0.05   0.08   0.06   0.03   0.01   0.01   0.00   0.00    0.0
+2021-02-28 23:40:00    0.0    0.0    0.0   0.00   0.00   0.00   0.18   0.25   1.78   3.97   5.08   4.98   5.40  ...   0.07   0.10   0.11   0.08   0.08   0.06   0.03   0.02   0.01   0.01   0.00   0.00    0.0
 
-[92354 rows x 13 columns]
+[1413 rows x 47 columns]}}
+
 ```
 
 Using the pandas DataFrame to store the returned data provides access to the wide array of methods the pandas package
