@@ -419,6 +419,8 @@ class DataBuoy(object):
         :param url: Location of text data
         :return: None
         """
+        if 'stdmet' not in self.data.keys():
+            self.data['stdmet'] = {}
         data_df = pd.read_csv(url, r"\s+")
         # The first column name often contains a # symbol.
         rename_cols = {c: c.replace('#', '')
@@ -617,6 +619,8 @@ class DataBuoy(object):
                         times_unavailable += month_abbrv + " not available.\n"
 
             if len(times_unavailable) > 0:
+                station_data_url = f'https://www.ndbc.noaa.gov/station_history.php?station={self.station_id}'
+                times_unavailable += f'Please review available station data:\n {station_data_url}'
                 logger.warning(times_unavailable)
 
         except requests.exceptions.SSLError as e:
@@ -731,6 +735,10 @@ class DataBuoy(object):
         return ids
 
     # ------------------ DATA PERSISTENCE METHODS -----------------------------
+    @deprecated(
+        deprecated_in='1.1.1', removed_in='2.0.0',
+        details='Use data_to_json instead (defaults to stdmet)'
+    )
     def stdmet_to_json(self, file_name, date_format="iso", orient="columns"):
         """
         A simple method for returning the existing stdmet data to a json file
@@ -738,16 +746,35 @@ class DataBuoy(object):
         self.data["stdmet"]['data'].to_json(
             file_name, date_format=date_format, orient=orient)
 
+    def data_to_json(self, file_name=False, date_format="iso", orient="columns", data_type="stdmet"):
+        """
+        Return specific data package data as JSON to specified file
+        :param file_name: Desired filename. If not provided will be station_id_data_type.json
+        :param date_format: Format for datetime values
+        :param orient: Cofigure orientation of DataFrame to JSON
+        :param data_type: Which data pacakge to return
+        :return: Success/Failure message
+        """
+        try:
+            file_name = file_name if file_name else f'{self.station_id}_{data_type}.json'
+            self.data[data_type]['data'].to_json(
+                file_name, date_format=date_format, orient=orient
+            )
+            return f"{file_name} successfully generated"
+        except:
+            return "JSON data export failed"
+
     def save(self, filename=False, orient='records', date_format='iso'):
         file_name = filename if filename else f"data_buoy_" \
             f"{self.station_id}.json"
         # Converting stdmet data attribute to JSON for object serialization
-        if self.data['stdmet']:
-            self.data['stdmet']['meta']['orient'] = orient
-            self.data['stdmet']['meta']['date_format'] = date_format
-            self.data['stdmet']['data'] = self.data['stdmet']['data'].to_json(
-                orient=orient,
-                date_format=date_format)
+        for dtype in self.DATA_PACKAGES.keys():
+            if self.data.get(dtype):
+                self.data[dtype]['meta']['orient'] = orient
+                self.data[dtype]['meta']['date_format'] = date_format
+                self.data[dtype]['data'] = self.data[dtype]['data'].to_json(
+                    orient=orient,
+                    date_format=date_format)
         # converting object attributes to a dictionary
         obj_vals = self.__dict__
         # Converting our dictionary to a valid JSON string
@@ -760,12 +787,13 @@ class DataBuoy(object):
     def load(cls, filename):
         file_str = open(filename, 'r').read()
         obj = json.loads(file_str)
-        if obj['data']['stdmet'].get('data', False):
-            orient = obj['data']['stdmet']['meta']['orient']
-            obj['data']['stdmet']['data'] = pd.read_json(
-                obj['data']['stdmet']['data'],
-                orient=orient)
-        inst = cls()
-        for k, v in obj.items():
-            inst.__setattr__(k, v)
+        for dtype in cls.DATA_PACKAGES.keys():
+            if obj['data'].get(dtype, False):
+                orient = obj['data'][dtype]['meta']['orient']
+                obj['data'][dtype]['data'] = pd.read_json(
+                    obj['data'][dtype]['data'],
+                    orient=orient)
+            inst = cls()
+            for k, v in obj.items():
+                inst.__setattr__(k, v)
         return inst

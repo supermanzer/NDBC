@@ -31,16 +31,16 @@ class DataBuoyTests(TestCase):
 
     def test_get_stdmet(self):
         # Get the default (most current month of data)
-        self.DB.get_stdmet()
+        self.DB.get_data()
         self.assertTrue(self.DB.data)
 
     def test_datetime_conversion_index(self):
-        self.DB.get_stdmet(datetime_index=True)
+        self.DB.get_data(datetime_index=True)
         dt = self.DB.data['stdmet']['data'].iloc[1].name
         self.assertIsInstance(dt, datetime)
 
     def test_datetime_conversion_column(self):
-        self.DB.get_stdmet()
+        self.DB.get_data()
         dt = self.DB.data['stdmet']['data'].iloc[1]['datetime']
         self.assertIsInstance(dt, datetime)
 
@@ -74,7 +74,7 @@ class DataBuoyTests(TestCase):
 
     def test_save_with_stdmet(self):
         filename = 'test_buoy.json'
-        self.DB.get_stdmet()
+        self.DB.get_data()
         self.DB.save(filename=filename)
         self.assertTrue(os.path.exists(filename))
         with open(filename, 'r') as f:
@@ -127,23 +127,25 @@ class DataBuoyTests(TestCase):
             test_db = DataBuoy(station_id)
             self.assertIsInstance(test_db, DataBuoy)
 
-    def test_edge_months(self):
-        """Validate fetching months that fall in previous year."""
-        current_month = datetime.today().month
-        future_months = list(range(current_month+1, current_month+5))
-        db = DataBuoy(46042)  # what can I say, it's my home station.
-        db.get_stdmet(months=future_months)
-        self.assertTrue(
-            'data' in db.data['stdmet'].keys(),
-            msg='Data key does not exist in stdmet dictionary'
-        )
-        self.assertIsInstance(
-            db.data['stdmet']['data'],
-            pandas.DataFrame,
-            msg='Pandas dataframe not instantiated'
-        )
-        self.assertGreater(
-            db.data['stdment']['data']['datetime'].count(),
-            0,
-            msg='Datetime column empty'
-        )
+    # THE BELOW COMMENTED OUT TEST WILL ONLY MAKE SENSE WHEN THE PREVIOUS YEAR
+    # SUMMARY IS NOT YET POSTED.  THIS GENERALLY ONLY APPLIES TO JAN & FEB MONTHS
+  # def test_edge_months(self):
+  #     """Validate fetching months that fall in previous year."""
+  #     current_month = datetime.today().month
+  #     future_months = list(range(current_month+1, current_month+5))
+  #     db = DataBuoy(46042)  # what can I say, it's my home station.
+  #     db.get_data(months=future_months)
+  #     self.assertTrue(
+  #         'data' in db.data['stdmet'].keys(),
+  #         msg='Data key does not exist in stdmet dictionary'
+  #     )
+  #     self.assertIsInstance(
+  #         db.data['stdmet']['data'],
+  #         pandas.DataFrame,
+  #         msg='Pandas dataframe not instantiated'
+  #     )
+  #     self.assertGreater(
+  #         db.data['stdment']['data']['datetime'].count(),
+  #         0,
+  #         msg='Datetime column empty'
+  #     )

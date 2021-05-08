@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="NDBC",
-    version="1.1.0",
+    version="1.1.1",
     description="A package to automate the loading of NDBC data to a custom object.",
     long_description=long_description,
     long_description_content_type="text/markdown",
