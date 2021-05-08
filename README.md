@@ -61,7 +61,7 @@ DB.station_info
     'lon': '122.398 W'}
 ```
 
-- `.get_stdmet(datetime_index=False)`
+- `.get_data(datetime_index=False)`
 
 After importing, the DataBuoy class is instantiated with the ID of the
 station from which historical data is sought. Then data may be gathered for
@@ -125,6 +125,21 @@ Year 2020 not available.
 2021-02-28 23:40:00    0.0    0.0    0.0   0.00   0.00   0.00   0.18   0.25   1.78   3.97   5.08   4.98   5.40  ...   0.07   0.10   0.11   0.08   0.08   0.06   0.03   0.02   0.01   0.01   0.00   0.00    0.0
 
 [1413 rows x 47 columns]}}
+
+```
+
+Likely due to my own biases in my research interests, the `get_data()`  function will default to fetching
+standard meteorological data.  However, users can specify different data packages like so `get_data(data_type='cwind')`.  To view which data packages
+are currently supported examine the `DataBuoy.DATA_PACKAGES` attribute:
+```
+{'cwind': {'name': 'Continous Wind Data', 'url_char': 'c'},
+ 'srad': {'name': 'Solar radiation data', 'url_char': 'r'},
+ 'stdmet': {'name': 'Standard meteoroligcal data', 'url_char': 'h'},
+ 'swden': {'name': 'Spectral Wave Density data', 'url_char': 'w'},
+ 'swdir': {'name': 'Spectral wave (alpha1) direction data', 'url_char': 'd'},
+ 'swdir2': {'name': 'Spectral wave (alpha2) direction data', 'url_char': 'i'},
+ 'swr1': {'name': 'Spectral wave (r1) direction data', 'url_char': 'j'},
+ 'swr2': {'name': 'Spectral wave (r2) direction data', 'url_char': 'k'}}
 
 ```
 

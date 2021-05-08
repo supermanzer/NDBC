@@ -2,6 +2,10 @@
 
 ---
 
+### v1.1.1
+- bug(fix) Correct issue with alpha characters in station ID string [#32](https://github.com/GenSci/NDBC/issues/32)
+- bug(fix) Prevent continuous year looping when URLs fail.
+
 ### v.1.1.0
 
 - Added support for multiple data package retrieval through a more general `get_data()` function.

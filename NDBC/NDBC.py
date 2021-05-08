@@ -120,14 +120,14 @@ class DataBuoy(object):
         :param station_id: Station identifier <- required for data access
         """
         if station_id:
-            self.station_id = str(station_id)
+            self.station_id = str(station_id).lower()
         self.data = {}
 
     def __str__(self):
         """
          Overriding the default __str__ method to be a bit more descriptive.
          """
-        return "NDBC.DataBuoy Object for Station " + self.station_id
+        return "NDBC.DataBuoy Object for Station " + self.station_id.upper()
 
     def __repr__(self):
         """
@@ -137,7 +137,7 @@ class DataBuoy(object):
         return self.__str__()
 
     def set_station_id(self, station_id):
-        self.station_id = str(station_id).upper()
+        self.station_id = str(station_id).lower()
 
     # ---------------- DEFINING PROPERTY DATA ACCESS ---------------------
     # DEFINING PROPRETY METHDOS TO RETURN DATAFRAMES USING DOT NOTATION
@@ -483,6 +483,11 @@ class DataBuoy(object):
                     if month_num == 0:
                         year_num -= 1
                         month_num = 12
+                        if year_num < dt.today().year -1:
+                            return f"""
+                            Recent data could not be accessed for over 1 year.
+                            Please review station {self.station_id} and data package {data_type}
+                            """
                 if my_url:
                     self.load_stdmet(my_url, datetime_index)
             else:
@@ -563,10 +568,15 @@ class DataBuoy(object):
                                              f"available.\n "
 
                     month_num -= 1
-                    # !st attempt to deal with January edge case
+                    # 1st attempt to deal with January edge case
                     if month_num == 0:
                         year_num -= 1
                         month_num = 12
+                        if year_num < dt.today().year -1:
+                            return f"""
+                            Recent data could not be accessed for over 1 year.
+                            Please review station {self.station_id} and data package {data_type}
+                            """
                 if my_url:
                     self.__load_data(
                         my_url, datetime_index=datetime_index, data_type=data_type)
