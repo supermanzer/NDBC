@@ -1,5 +1,5 @@
 beautifulsoup4==4.9.3
-bleach==3.1.0
+bleach==3.3.0
 bs4==0.0.1
 CacheControl==0.12.6
 cachy==0.3.0
