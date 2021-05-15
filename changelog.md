@@ -2,6 +2,11 @@
 
 ---
 
+### v.1.2.0
+ - Added `from .NDBC import DataBuoy` to `__init__.py` to reduce redundant import statements.  DataBuoy class can be imported as `from NDBC import DataBuoy`.
+ - Moved package details to `setup.cfg` following [python.org best practices](https://packaging.python.org/tutorials/packaging-projects/)
+ 
+
 ### v1.1.1
 - bug(fix) Correct issue with alpha characters in station ID string [#32](https://github.com/GenSci/NDBC/issues/32)
 - bug(fix) Prevent continuous year looping when URLs fail.

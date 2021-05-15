@@ -4,9 +4,8 @@
 name: Upload Python Package
 
 on:
-  push:
-    branches:
-      - main
+  release:
+    types: [created]
 
 jobs:
   deploy:
@@ -27,5 +26,6 @@ jobs:
           TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
           TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
         run: |
-          python setup.py sdist bdist_wheel
+          pip install --upgrade build
+          python -m builds
           twine upload dist/*
