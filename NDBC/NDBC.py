@@ -24,6 +24,135 @@ from logging import getLogger
 
 logger = getLogger(__name__)
 
+class StationWebManager:
+    """Defines a class for interacting with NDBC web resources.
+
+    :args
+        station_id: NDBC station identifier
+    :properties:
+        BASE_URL: NDBC program URL
+        STATION_URL:  Station specific website URL
+        DATA_MONTH_URLS:  URL patterns used to fetch monthly data summaries
+        DATA_YEAR_URLS:  URL patterns used to fetch annual data summaries
+        SEARCH_TYPES:  Search methods available from NDBC station website
+        UOMS:  Units of measurement in search paramters
+        OBS_TYPES: Types of observational platforms
+        LAT_RE:  Lattitude regex pattern
+        LON_RE:  Longitude regex pattern
+        ATTR_RE:  Station attribute regex pattern
+    :returns
+         StationUrlManager object
+    """
+    # CONSTANTS
+    BASE_URL = "https://www.ndbc.noaa.gov/"
+    # Python format string - accepts station_id as paramter
+    STATION_URL = BASE_URL + "station_page.php?station={}"
+    DATA_MONTH_URLS = [
+        "https://www.ndbc.noaa.gov/data/{dtype}/{month_abbrv}/{station}.txt",
+        "https://www.ndbc.noaa.gov/view_text_file.php?filename={station}{"
+        "month_num}{year}.txt.gz&dir=data/{dtype}/{month_abbrv}/",
+    ]
+
+    DATA_YEAR_URLS = [
+        "https://www.ndbc.noaa.gov/view_text_file.php?filename={"
+        "station}{url_char}{year}.txt.gz&dir=data/historical/{dtype}/",
+    ]
+    SEARCH_TYPES = {
+        'radial': 'radial_search.php',
+        'box': 'box_search.php'
+    }
+    UOMS = {
+        'metric': "M",
+        'english': "E"
+    }
+    OBS_TYPES = {
+        'buoy': "B",
+        'ship': 'S',
+        'all': 'A'
+    }
+    # REGEX PATTERNS FOR PARSING HTML STATION PAGES
+    LAT_RE = r"\d+\.\d+\s+N"
+    LON_RE = r"\d+\.\d+\s+W"
+    ATTR_RE = r"<b>(.*):</b>\s*(.*)<br/>"
+
+    # METHODS
+    def __init__(self, station_id=False) -> None:
+        """
+        Initialize object instance
+        :param station_id: Station identifier
+        """
+        if station_id:
+            self.station_id = str(station_id).lower()
+        self.data = {}
+
+    def set_station_id(self, station_id) -> None:
+        """
+        Assign station_id attribute
+        :param station_id: NDBC station identifier
+        :return: None
+        """
+        self.station_id = str(station_id).lower()
+
+    @staticmethod
+    def __check_urls__(urls):
+        """
+        Simple method to check list of urls, check if they return a 200 status
+        code with a HEAD request, and return the first valid URL (if any).
+        :param urls: The list of urls to check
+        :return: The valid URL or False if none
+        """
+        url_check = [requests.head(url).status_code == 200 for url in urls]
+        return urls[url_check.index(True)] if any(url_check) else False
+
+    @staticmethod
+    def __build_urls__(urls, format_kwargs) -> list:
+        """
+        Perform string formatting operations for URLs
+        :param urls: list of URl strings to be formatted
+        :param format_kwargs:  Kwargs to format URLS with
+        :return: list of formatted URLs
+        """
+        return [url.format(**format_kwargs) for url in urls]
+
+    def __parse_metadata(self, element) -> dict:
+        """
+        Parse HTML table of station metadata and return dictionary of values.
+        :param element: BeautifulSoup element containing station metadata
+        :return: dict:  Pareed metdata into kew: value pairs
+        """
+        station_info = {}
+        for line in str(element).split("\n"):
+            if re.search(self.LAT_PAT, line):
+                station_metadata["lat"] = re.search(self.LAT_PAT, line).group()
+            if re.search(self.LON_PAT, line):
+                station_metadata["lon"] = re.search(self.LON_PAT, line).group()
+            if re.search(self.ATTR_PAT, line):
+                k, v = re.search(self.ATTR_PAT, line).groups()
+                station_metadata[k] = v
+        return station_info
+
+    def get_station_metadata(self) -> dict:
+        """
+        Define method to fetch and return station metadata
+        :return: dict: station metadata as Python dictionary
+         """
+        if not hasattr(self, 'station_id'):
+            raise LookupError("No station ID provided")
+        response = requests.get(self.STATION_URL.format(self.station_id))
+        soup = BeautifulSoup(response.content, "html.parser")
+        meta_div = soup.find("div", id="stn_metadata")
+        if meta_div:
+            for el in meta_div.find_all("p"):
+                # Iterate over <p> tags.  One of these will have the station
+                # details we are looking for.
+                if (
+                    re.search(self.LAT_PAT, str(el))
+                    and re.search(self.LON_PAT, str(el))
+                    and re.search(self.ATTR_PAT, str(el))
+                ):
+                    return self.__parse_metadata(el)
+        else:
+            raise ValueError("Station metadata not found")
 
 class DataBuoy(object):
     """
