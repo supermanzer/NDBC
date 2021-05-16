@@ -44,6 +44,40 @@ class StationWebManager:
          StationUrlManager object
     """
     # CONSTANTS
+    DATA_PACKAGES = {
+        'stdmet': {
+            'name': 'Standard meteoroligcal data',
+            'url_char': 'h'
+        },
+        'cwind': {
+            'name': 'Continous Wind Data',
+            'url_char': 'c'
+        },
+        'swden': {
+            'name': 'Spectral Wave Density data',
+            'url_char': 'w'
+        },
+        'swdir': {
+            'name': 'Spectral wave (alpha1) direction data',
+            'url_char': 'd'
+        },
+        'swdir2': {
+            'name': "Spectral wave (alpha2) direction data",
+            'url_char': 'i'
+        },
+        'swr1': {
+            'name': "Spectral wave (r1) direction data",
+            'url_char': 'j'
+        },
+        'swr2': {
+            'name': "Spectral wave (r2) direction data",
+            'url_char': 'k'
+        },
+        'srad': {
+            'name': 'Solar radiation data',
+            'url_char': 'r'
+        }
+    }
     BASE_URL = "https://www.ndbc.noaa.gov/"
     # Python format string - accepts station_id as paramter
     STATION_URL = BASE_URL + "station_page.php?station={}"
@@ -83,7 +117,6 @@ class StationWebManager:
         """
         if station_id:
             self.station_id = str(station_id).lower()
-        self.data = {}
 
     def set_station_id(self, station_id) -> None:
         """
@@ -153,6 +186,202 @@ class StationWebManager:
                     return self.__parse_metadata(el)
         else:
             raise ValueError("Station metadata not found")
+
+    # ---------------- STATION SEARCH METHODS - -----------------------------
+
+    # https: // www.ndbc.noaa.gov / radial_search.php?lat1 = 36.79 & lon1 = \
+    #  -122.4 & uom = M & dist = 50 & ot = B & time = -1
+    # URL generated for radial search lat = 36.79, lon = -122.4,
+    # uom = Metric, distance = 50 km, observation type = moored buoy, time =
+    # t - 1 hour
+
+    # https: // www.ndbc.noaa.gov / radial_search.php?lat1 = 36.79 & lon1 =
+    # -122.4 & uom = E & dist = 50 & ot = B & time = 1
+    # URL generated for radial search with uom = English, distance = 50
+    # miles, observation type = moored buoy, time = within the past 1 hour.
+
+    # https://www.ndbc.noaa.gov/box_search.php?lat1=36.785+N&lat2=37.125+N&
+    # lon1=-122.4&lon2=-121.4&uom=M&ot=A&time=1
+    # URL box search with Metric measurements in the past hour
+
+    def _ss_args_check(self, search_type='radial', lat1=False,
+                       lat2=False, lon1=False, lon2=False, uom='metric',
+                       time=1, obs_type='buoy', distance=False):
+        """Station Search arguments checking"""
+        if search_type not in self.SEARCH_TYPES.keys():
+            raise ValueError(f'Invalid search type. Please use one of the '
+                             f'following: {", ".join(self.SEARCH_TYPES.keys())}')
+        if uom not in self.UOMS.keys():
+            msg = f'Invalid UOM. Please use one of the following: ' \
+                  f'{", ".join(self.UOMS.keys())}'
+            raise ValueError(msg)
+        if obs_type not in self.OBS_TYPES.keys():
+            msg = f'Invalid observation type.  Please use one of the ' \
+                  f'following: {", ".join(self.OBS_TYPES.keys())}'
+            raise ValueError(msg)
+        if type(time) != int or abs(time) > 23:
+            raise ValueError('Time arg must be an integer with an absolute '
+                             'value of 23 or less.')
+        # ASSIGNING LAT1 AND LON1
+        lat1 = lat1 if lat1 else (self.station_info['lat'] if self.station_info[
+            'lat'] else False)
+        lon1 = lon1 if lon1 else (self.station_info['lon'] if self.station_info[
+            'lon'] else False)
+
+        # VALIDATING COORDINATES/ARGS FOR SEARCH TYPES
+        if search_type == 'radial' and not all([lat1, lon1, distance]):
+            raise ValueError('Radial search requires lat, lon, and distance.')
+        if search_type == 'box' and not all([lat1, lat2, lon1, lon2]):
+            raise ValueError('Box search requires two lat and lon pairs.')
+
+        return lat1, lon1
+
+    def _ss_build_url(
+            self, search_type, lat1, lat2=False, lon1=False, lon2=False,
+            uom='metric', time=1, obs_type='buoy', distance=False):
+
+        search_url = f'{self.BASE_URL}{self.SEARCH_TYPES[search_type]}?'
+
+        if search_type == 'radial':
+            search_url += f'lat1={lat1}&lon1={lon1}&uom=' \
+                          f'{self.UOMS[uom]}&dist={distance}&ot=' \
+                          f'{self.OBS_TYPES[obs_type]}&time={time}'
+        elif search_type == 'box':
+            search_url += f'lat1={lat1}&lat2={lat2}&lon1={lon1}&lon2={lon2}'
+            search_url += f'&uom={self.UOMS[uom]}&ot={self.OBS_TYPES[obs_type]}'
+            search_url += f'&time={time}'
+
+        return search_url
+
+    def _ss_parse_response(self, url):
+        """
+        Make request using URL provided and parse the response for a list of
+        unique station IDs.
+        """
+        response = requests.get(url)
+        # Checking the validity of our response
+        if response.status_code != 200:
+            raise ValueError(f'The url generated \n {url} \n returned a '
+                             f'status code of {response.status_code}')
+        # Parsing the HTML returned
+        soup = BeautifulSoup(response.content, 'html.parser')
+        # The station IDs returned by this search are all contained within
+        # <a> elements that include links to the station pages.  We can use
+        # this to find them.
+        station_anchors = soup.find_all(href=re.compile('station_page.php'))
+        station_ids = set([a.text for a in station_anchors if int(a.text) !=
+                           int(self.station_id)])
+        return station_ids
+
+    def station_search(self, search_type='radial', lat1=False,
+                       lat2=False, lon1=False, lon2=False, uom='metric',
+                       time=1, obs_type='buoy', distance=False):
+        """
+        Station search function.  Defaults to radial search.  Uses lat/lon
+        coordinates if supplied, otherwise will default to the coordinates of
+        the DataBuoy instance (if available).  UOM determines which distance
+        unit is used (defaults to metric) and time determines the time offset
+        in which measurements must have occurred for a station to be
+        included.  Obs_type determines the type of stations to be included (
+        buoy: moored buoy, ship: Ships and drifters, all: All station types).
+        Distance determines how wide an area to include (only applies to
+        radial search).
+        """
+        # CHECKING ARGS BEFORE WE START DOING ANYTHING FANCY
+        lat1, lon1 = self._ss_args_check(search_type, lat1, lat2, lon1, lon2,
+                                         uom, time, obs_type, distance)
+        # OKAY, LET'S BEGIN
+        url = self._ss_build_url(search_type, lat1, lat2, lon1, lon2, uom,
+                                 time, obs_type, distance)
+        ids = self._ss_parse_response(url)
+        return ids
+
+class DataParseStorage():
+    """
+    Define a class focused on retrieving and parsing NDBC
+    data packages.
+    """
+    # CONSTANTS
+    # Append to this dictionary if/when NDBC columns change naming
+    # conventions over time.
+    RENAME_COLS = {
+        'WD': 'WDIR'
+    }
+    # Map datetime column names to foratting strings
+    # Duplicates (e.g YYYY and YY) handle different formats over
+    # years
+    DATETIME_COLS= {
+        'YYYY': '%Y',
+        'YY': '%Y',
+        'MM': '%m',
+        'DD': '%d',
+        'hh': '%H',
+        'mm': '%M'
+    }
+    # Define columns to be set to 'int32' type
+    INT_COLS = [
+        'YY',
+        'YYYY',
+        'MM',
+        'DD',
+        'hh',
+        'mm',
+        'WDIR',
+    ]
+    # METHODS
+    def __init__(self):
+        self.data = {}
+        return super().__init__()
+
+    def __split_units(self, data: pd.DataFrame) -> Tuple[pd.DataFrame, dict]:
+        """
+        Check for and split out units in DataFrame made from NDBC text file.
+        :param data: DataFrame createed from NDBC text file
+        :return: DataFrame with untis row removed
+        :return: dict mapping units to DataFrame column names
+        """
+        units = False
+        if isinstance(data.loc[0][0], str) and data.loc[0][0][0] == '#':
+            units = data.loc[0]
+            columns = data.columns
+            data = data.drop([0])
+            units = {k: units[i] for i, k in enumerate(columns)}
+        return data, units
+
+    def __assign_units(self, units: dict, data_pkg: str) -> None:
+        """
+        Assign units dictionary to meta attribute
+        :param units: dict mapping units to DataFrame columns
+        :param data_pkg: str identifying the data package the units pertain to
+        :return: None
+        """
+        if "meta" not in self.data[data_type].keys():
+            self.data[data_type]['meta'] = {}
+        self.data[data_type]['meta']['units'] = units
+
+    def __datetime_parts(self, df: pd.DataFrame) -> dict:
+        """
+        Return datetime columns and formatting string for given DataFrame
+        :param df: DataFrame of NDBC data
+        :return: dict of datetime columns and formatting sting
+        """
+        dt_cols = [c for c in df.columns if c in self.DATETIME_COLS.keys()]
+        dt_format = ' '.join([self.DATETIME_COLS[c] for c in dt_cols])
+        return {'columns': dt_cols, 'format_string': dt_format}
+
+    def __set_dtypes(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Assign data types to columns (iproves coparison performance).
+        :param df:
+        :return:
+        """
+        # Map columns names to data type strings
+        types_dict = {
+            c: 'int32' if c in self.INT_COLS else 'float64'
+            for c in df.columns.to_list()
+        }
+        return df.astype(types_dict)
+
 
 class DataBuoy(object):
     """
