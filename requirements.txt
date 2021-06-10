@@ -39,6 +39,6 @@ soupsieve==2.2.1
 tomlkit==0.5.11
 tqdm==4.36.1
 twine==2.0.0
-urllib3==1.25.11
+urllib3==1.26.5
 webencodings==0.5.1
 zipp==3.4.1
