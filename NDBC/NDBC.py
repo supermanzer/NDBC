@@ -8,23 +8,22 @@
 
 """
 
-import requests
-import pandas as pd
 import json
 import re
-import numpy as np
-
-from deprecation import deprecated
 from datetime import datetime as dt
-from bs4 import BeautifulSoup
+from logging import getLogger
 from typing import Union
 
-
-from logging import getLogger
+import numpy as np
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+from deprecation import deprecated
 
 logger = getLogger(__name__)
 
-class StationWebManager:
+
+class StationWebManager():
     """Defines a class for interacting with NDBC web resources.
 
     :args
@@ -117,6 +116,7 @@ class StationWebManager:
         """
         if station_id:
             self.station_id = str(station_id).lower()
+        super().__init__(station_id)
 
     def set_station_id(self, station_id) -> None:
         """
@@ -147,6 +147,41 @@ class StationWebManager:
         """
         return [url.format(**format_kwargs) for url in urls]
 
+    def make_kwargs(self, month: int, year: int, data_type: str) -> dict:
+        """
+        Return dictionary of keyword arguments for URL template string formatting
+        :param month: Integer of the month requested
+        :param year: Year integer 
+        :param data_type: type of data pacakge
+        :return: dictionary of keyword arguments
+        """
+        kws = {'station': self.station_id, 'dtype': data_type}
+        # TODO: Include kwarg generation for month/year
+        kws['year'] = year if year else (
+            dt.today().year if month <= dt.today().month else dt.today().year - 1
+        )
+        if month:
+            dkws = {
+                'month_abbrv': dt(dt.today().year, month, 1).strftime('%b'),
+                'month_num': month
+            }
+            kws.update(dkws)
+
+        return kws
+
+    def fetch_data(self, month=None, year=None, data_type='stdmet'):
+        if data_type not in self.DATA_PACKAGES.keys():
+            pkgs = [{k: self.DATA_PACKAGES[k]['name']}
+                    for k in self.DATA_PACKAGES.keys()]
+            raise Exception(f"""
+                       Data type {data_type} not understood.  Please use one of the following
+                       identified data packages:
+                       {pkgs}
+                   """)
+        urls = self.DATA_MONTH_URLS if month else self.DATA_YEAR_URLS
+        kws = self.make_kwargs()
+        pass
+
     def __parse_metadata(self, element) -> dict:
         """
         Parse HTML table of station metadata and return dictionary of values.
@@ -155,13 +190,13 @@ class StationWebManager:
         """
         station_info = {}
         for line in str(element).split("\n"):
-            if re.search(self.LAT_PAT, line):
-                station_metadata["lat"] = re.search(self.LAT_PAT, line).group()
-            if re.search(self.LON_PAT, line):
-                station_metadata["lon"] = re.search(self.LON_PAT, line).group()
-            if re.search(self.ATTR_PAT, line):
-                k, v = re.search(self.ATTR_PAT, line).groups()
-                station_metadata[k] = v
+            if re.search(self.LAT_RE, line):
+                station_info["lat"] = re.search(self.LAT_RE, line).group()
+            if re.search(self.LON_RE, line):
+                station_info["lon"] = re.search(self.LON_RE, line).group()
+            if re.search(self.ATTR_RE, line):
+                k, v = re.search(self.ATTR_RE, line).groups()
+                station_info[k] = v
         return station_info
 
     def get_station_metadata(self) -> dict:
@@ -179,9 +214,9 @@ class StationWebManager:
                 # Iterate over <p> tags.  One of these will have the station
                 # details we are looking for.
                 if (
-                    re.search(self.LAT_PAT, str(el))
-                    and re.search(self.LON_PAT, str(el))
-                    and re.search(self.ATTR_PAT, str(el))
+                        re.search(self.LAT_RE, str(el))
+                        and re.search(self.LON_RE, str(el))
+                        and re.search(self.ATTR_RE, str(el))
                 ):
                     return self.__parse_metadata(el)
         else:
@@ -296,7 +331,8 @@ class StationWebManager:
         ids = self._ss_parse_response(url)
         return ids
 
-class DataParseStorage():
+
+class DataManager():
     """
     Define a class focused on retrieving and parsing NDBC
     data packages.
@@ -310,7 +346,7 @@ class DataParseStorage():
     # Map datetime column names to foratting strings
     # Duplicates (e.g YYYY and YY) handle different formats over
     # years
-    DATETIME_COLS= {
+    DATETIME_COLS = {
         'YYYY': '%Y',
         'YY': '%Y',
         'MM': '%m',
@@ -328,12 +364,13 @@ class DataParseStorage():
         'mm',
         'WDIR',
     ]
+
     # METHODS
     def __init__(self):
         self.data = {}
         return super().__init__()
 
-    def __split_units(self, data: pd.DataFrame) -> Tuple[pd.DataFrame, dict]:
+    def __split_units(self, data: pd.DataFrame) -> tuple:
         """
         Check for and split out units in DataFrame made from NDBC text file.
         :param data: DataFrame createed from NDBC text file
@@ -381,6 +418,209 @@ class DataParseStorage():
             for c in df.columns.to_list()
         }
         return df.astype(types_dict)
+
+    def __build_datetime(self, data: pd.DataFrame) -> list:
+        """
+        Return datetime series constructed from extracted date parts
+        :param data:Standard meteorological data
+        :return: list of Python datetime instances.
+        """
+        dtdict = self.__get_dt_parts(data)
+        # Addressing issues with 2 digit years (pre 1996 data)
+        year_column = dtdict['columns'][0]
+        if data[year_column].iloc[0] < 100:
+            data[year_column] = data[year_column] + 1900
+        # Return a list of datetime objects for each row in dataframe
+        return [
+            dt.strptime(
+                ' '.join([str(getattr(r, v)) for v in dtdict['columns']]),
+                dtdict['format_string'])
+            for r in data.itertuples()
+        ]
+
+    def __add_datetime(self, data: pd.DataFrame, datetime_index) -> \
+            pd.DataFrame:
+        """
+        Append datetime either as a column or record index
+        :param data: pandas Dataframe of stdmet data
+        :param datetime_index: Whether datetimes will be appended as column
+        or dataframe index
+        :return: dataframe with datetime appended and date part columns dopped
+        """
+        # Getting the list of dates to add
+        dt_list = self.__build_datetime(data)
+        # Get list of columns to drop
+        dt_cols = self.__datetime_parts(data)['columns']
+        if datetime_index:
+            data.index = dt_list
+        else:
+            data['datetime'] = dt_list
+
+        return data.drop(columns=dt_cols)
+
+    @staticmethod
+    def __bad_data_func(x, n):
+        """
+        Check an individual value from NDBC data files to see if it meets the
+        standard for NDBC bad data flag.
+        :param x: The value being checked
+        :param n: the max length of the values for a given metric.
+        :return: Value if valid, None if not.
+        """
+        val = np.NaN if all([d == '9' for d in str(int(x))]) and len(
+            str(int(x))) == n else x
+        return val
+
+    def __bad_data_check(self, df, datetime_index):
+        """Replace NDBC bad data flag with NumPy NaN"""
+        cols = df.columns.to_list()
+        if not datetime_index:
+            cols.remove('datetime')
+        for col in cols:
+            n = len(str(int(df[col].max())))
+            df[col] = df[col].apply(self.__bad_data_func, n=n)
+        return df
+
+    def __load_data(self, url, datetime_index=False, data_type='stdmet'):
+        """
+        Load retrieved data as part of object
+        :param url: Verified URL for given station and data type
+        :param datetime_index: Use datetime value as index (True) or column (False)
+        :param data_type: Type of data package to retrieve
+        :return: None
+        """
+        if data_type not in self.data.keys():
+            self.data[data_type] = {}
+        data_df = pd.read_csv(url, r"\s+")
+        rename_cols = {c: c.replace('#', '')
+                       for c in data_df.columns
+                       if '#' in c}
+        data_df.rename(columns=rename_cols, inplace=True)
+        data_df, units = self.__split_units(data_df)
+        if units:
+            self.__assign_units(units, data_type)
+        data_df = self.__set_dtypes(data_df)
+        data_df = self.__add_datetime(data_df, datetime_index)
+        data_df = self.__bad_data_check(data_df, datetime_index)
+        if "data" in self.data[data_type].keys():
+            self.data[data_type]["data"] = self.data[data_type]["data"].append(
+                data_df)
+        else:
+            self.data[data_type]["data"] = data_df
+
+    def get_data(self, years=[], months=[], datetime_index=False, data_type='stdmet'):
+        """
+        Fetch data paylod for a given NDBC data station.
+        :param years: List of years
+        :param months: List of months
+        :param datetime_index: Whether to use datetime as DataFrame index or column
+        :param data_type: Data payload type
+        :return: None, data stored as part of Class object
+        """
+        if data_type not in self.DATA_PACKAGES.keys():
+            pkgs = [{k: self.DATA_PACKAGES[k]['name']}
+                    for k in self.DATA_PACKAGES.keys()]
+            raise Exception(f"""
+                Data type {data_type} not understood.  Please use one of the following
+                identified data packages:
+                {pkgs}
+            """)
+        times_unavailable = ""
+        # If no time frame is specified we retrieve the most current complete
+        # month for the given station.
+        try:
+            if not years and not months:
+                month_num = dt.today().month
+                year_num = dt.today().year
+                my_url = False
+                # Looping through potentially available months.
+                while not my_url:
+                    month_abbrv = dt(year_num, month_num, 1).strftime("%b")
+                    kws = {"month_abbrv": month_abbrv, "month_num": month_num,
+                           "station": self.station_id, "year": year_num, "dtype": data_type}
+                    my_url = self.__check_urls__(
+                        self.__build_urls__(self.data_monthurls, kws)
+                    )
+                    if not my_url:
+                        times_unavailable += f"{month_abbrv} {year_num} not " \
+                                             f"available.\n "
+
+                    month_num -= 1
+                    # 1st attempt to deal with January edge case
+                    if month_num == 0:
+                        year_num -= 1
+                        month_num = 12
+                        if year_num < dt.today().year - 1:
+                            return f"""
+                            Recent data could not be accessed for over 1 year.
+                            Please review station {self.station_id} and data package {data_type}
+                            """
+                if my_url:
+                    self.__load_data(
+                        my_url, datetime_index=datetime_index, data_type=data_type)
+            else:
+                for year in years:
+                    kws = {"year": year, "station": self.station_id,
+                           'dtype': data_type, 'url_char': self.DATA_PACKAGES[data_type]['url_char']}
+                    my_url = self.__check_urls__(
+                        self.__build_urls__(self.data_yearurls, kws)
+                    )
+                    if my_url:
+                        self.__load_data(
+                            my_url, datetime_index=datetime_index, data_type=data_type)
+                    else:
+                        times_unavailable += "Year " + \
+                                             str(year) + " not available.\n"
+
+                for month in months:
+                    month_abbrv = dt(dt.today().year, month, 1).strftime("%b")
+                    # Adjusting for month wrapping cases (e.g. wanting December monthly data in January).
+                    year = dt.today().year if month <= dt.today().month else dt.today().year - 1
+                    # When using the 2nd of the stdmet_monthurl patterns, two digit
+                    # month numbers are converted into the letters a, b, and c.
+                    kws = {
+                        "year": year,
+                        "month_abbrv": month_abbrv,
+                        "month_num": month if month < 10 else chr(97 + (month - 10)),
+                        "station": self.station_id,
+                        'dtype': data_type
+                    }
+                    my_url = self.__check_urls__(
+                        self.__build_urls__(self.data_monthurls, kws)
+                    )
+                    if my_url:
+                        self.__load_data(
+                            my_url, datetime_index=datetime_index, data_type=data_type)
+                    else:
+                        times_unavailable += month_abbrv + " not available.\n"
+
+            if len(times_unavailable) > 0:
+                station_data_url = f'https://www.ndbc.noaa.gov/station_history.php?station={self.station_id}'
+                times_unavailable += f'Please review available station data:\n {station_data_url}'
+                logger.warning(times_unavailable)
+
+        except requests.exceptions.SSLError as e:
+            logger.error(f'NDBC Server unavailable: {e}')
+
+
+class DB2(StationWebManager, DataManager):
+    """
+    Defining a DataBuoy class as inheriting the methods of
+    the StationWebManager and DataManager
+    """
+
+    def __str__(self):
+        """
+         Overriding the default __str__ method to be a bit more descriptive.
+         """
+        return "NDBC.DataBuoy Object for Station " + self.station_id.upper()
+
+    def __repr__(self):
+        """
+        Matching __str__ format
+        :return: string
+        """
+        return self.__str__()
 
 
 class DataBuoy(object):
@@ -629,9 +869,9 @@ class DataBuoy(object):
                 # Iterate over <p> tags.  One of these will have the station
                 # details we are looking for.
                 if (
-                    re.search(self.LAT_PAT, str(el))
-                    and re.search(self.LON_PAT, str(el))
-                    and re.search(self.ATTR_PAT, str(el))
+                        re.search(self.LAT_PAT, str(el))
+                        and re.search(self.LON_PAT, str(el))
+                        and re.search(self.ATTR_PAT, str(el))
                 ):
                     self.__parse_metadata(el)
         else:
@@ -717,7 +957,7 @@ class DataBuoy(object):
         # Return a list of datetime objects for each row in dataframe
         return [
             dt.strptime(
-                ' '.join([str(getattr(r, v))for v in dtdict['columns']]),
+                ' '.join([str(getattr(r, v)) for v in dtdict['columns']]),
                 dtdict['format_string'])
             for r in data.itertuples()
         ]
@@ -843,7 +1083,7 @@ class DataBuoy(object):
                     if month_num == 0:
                         year_num -= 1
                         month_num = 12
-                        if year_num < dt.today().year -1:
+                        if year_num < dt.today().year - 1:
                             return f"""
                             Recent data could not be accessed for over 1 year.
                             Please review station {self.station_id} and data package {data_type}
@@ -861,7 +1101,7 @@ class DataBuoy(object):
                         self.load_stdmet(my_url, datetime_index)
                     else:
                         times_unavailable += "Year " + \
-                            str(year) + " not available.\n"
+                                             str(year) + " not available.\n"
 
                 for month in months:
                     month_abbrv = dt(dt.today().year, month, 1).strftime("%b")
@@ -932,7 +1172,7 @@ class DataBuoy(object):
                     if month_num == 0:
                         year_num -= 1
                         month_num = 12
-                        if year_num < dt.today().year -1:
+                        if year_num < dt.today().year - 1:
                             return f"""
                             Recent data could not be accessed for over 1 year.
                             Please review station {self.station_id} and data package {data_type}
@@ -986,7 +1226,7 @@ class DataBuoy(object):
 
     # -------------------- STATION SEARCH METHODS ------------------------------
     # https: // www.ndbc.noaa.gov / radial_search.php?lat1 = 36.79 & lon1 = \
-      #  -122.4 & uom = M & dist = 50 & ot = B & time = -1
+    #  -122.4 & uom = M & dist = 50 & ot = B & time = -1
     # URL generated for radial search lat = 36.79, lon = -122.4,
     # uom = Metric, distance = 50 km, observation type = moored buoy, time =
     # t - 1 hour
@@ -1009,11 +1249,11 @@ class DataBuoy(object):
                              f'following: {", ".join(self.SEARCH_TYPES.keys())}')
         if uom not in self.UOMS.keys():
             msg = f'Invalid UOM. Please use one of the following: ' \
-                f'{", ".join(self.UOMS.keys())}'
+                  f'{", ".join(self.UOMS.keys())}'
             raise ValueError(msg)
         if obs_type not in self.OBS_TYPES.keys():
             msg = f'Invalid observation type.  Please use one of the ' \
-                f'following: {", ".join(self.OBS_TYPES.keys())}'
+                  f'following: {", ".join(self.OBS_TYPES.keys())}'
             raise ValueError(msg)
         if type(time) != int or abs(time) > 23:
             raise ValueError('Time arg must be an integer with an absolute '
@@ -1124,7 +1364,7 @@ class DataBuoy(object):
 
     def save(self, filename=False, orient='records', date_format='iso'):
         file_name = filename if filename else f"data_buoy_" \
-            f"{self.station_id}.json"
+                                              f"{self.station_id}.json"
         # Converting stdmet data attribute to JSON for object serialization
         for dtype in self.DATA_PACKAGES.keys():
             if self.data.get(dtype):
