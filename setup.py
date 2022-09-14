@@ -1,24 +1,21 @@
-import setuptools
+"""
+    Setup file for NDBC.
+    Use setup.cfg to configure your project.
 
-with open("README.md", "r") as fh:
-    long_description = fh.read()
+    This file was generated with PyScaffold 4.3.
+    PyScaffold helps you to put up the scaffold of your new Python project.
+    Learn more under: https://pyscaffold.org/
+"""
+from setuptools import setup
 
-setuptools.setup(
-    name="NDBC",
-    version="1.1.1",
-    description="A package to automate the loading of NDBC data to a custom object.",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    url="https://github.com/GenSci/NDBC",
-    author="C. Ryan Manzer",
-    author_email="ryan@gensci.org",
-    packages=['NDBC'],
-    classifiers=[
-        "Programming Language :: Python :: 3.7",
-        "License :: OSI Approved :: MIT License",
-        "Operating System :: OS Independent",
-    ],
-
-    test_suite="tests",
-    python_requires='>=3.7'  # use of data class requires higher version of Python
-)
+if __name__ == "__main__":
+    try:
+        setup(use_scm_version={"version_scheme": "no-guess-dev"})
+    except:  # noqa
+        print(
+            "\n\nAn error occurred while building the project, "
+            "please ensure you have the most updated version of setuptools, "
+            "setuptools_scm and wheel with:\n"
+            "   pip install -U setuptools setuptools_scm wheel\n\n"
+        )
+        raise

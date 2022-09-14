@@ -14,7 +14,7 @@ This file defines the DataBuoy class. The purpose of this class is to
 allow a user to define a specific data buoy they wish to gather data
 from and provide the user with methods to collect and analyze this data.
 
-Dependencies are listed in `requirements.txt`
+
 
 ## Usage
 
@@ -32,7 +32,7 @@ Then you are ready to start using this module in exploratory data analyses and s
 
 `.set_station_id`
 
-If a DataBuoy class has been instantiated without any `station_id` argument, this method allows for setting a station id
+If a DataBuoy class has been instantiated without any `station_id` parameter, this method allows for setting a station id
 
 ```
 from NDBC.NDBC import DataBuoy
@@ -102,15 +102,15 @@ n42.data  # <- anticipating additional data collection methods, the .data proper
 [741 rows x 13 columns]}
 ```
 
-By default the `get_data()` function will fetch the most current month's data. However, the function can take lists of years & months ([int]) to specify a timeframe.
+By default the `get_data()` function will fetch the most current month's data. However, the function can take lists of years & months ([int]) to specify a time-frame.
 
 ```
->>> n42 = NDBC.DataBuoy('46042')
->>> n42.get_data(months=[1,2], years=range(2019, 2020), datetime_index=True, data_type='swden)
+$ n42 = NDBC.DataBuoy('46042')
+$ n42.get_data(months=[1,2], years=range(2019, 2020), datetime_index=True, data_type='swden)
 Year 2019 not available.
 Year 2020 not available.
  
->>> n42.data
+$ n42.data
 {'swden': {'data':                      .0200  .0325  .0375  .0425  .0475  .0525  .0575  .0625  .0675  .0725  .0775  .0825  .0875  ...  .3000  .3100  .3200  .3300  .3400  .3500  .3650  .3850  .4050  .4250  .4450  .4650  .4850
 2021-01-01 00:40:00    0.0    0.0    0.0   0.00   1.17   9.11  24.25  24.95  15.84  20.44  26.48  20.63  12.72  ...   0.28   0.31   0.19   0.20   0.13   0.07   0.06   0.05   0.03   0.01   0.01   0.00    0.0
 2021-01-01 01:40:00    0.0    0.0    0.0   0.00   0.00  13.76  26.55  22.40  24.12  30.09  23.41  15.74  14.95  ...   0.25   0.16   0.12   0.16   0.06   0.16   0.06   0.03   0.05   0.02   0.01   0.00    0.0
