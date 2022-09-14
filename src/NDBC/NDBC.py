@@ -361,7 +361,7 @@ class DataBuoy(object):
         """
         if data_type not in self.data.keys():
             self.data[data_type] = {}
-        data_df = pd.read_csv(url, r"\s+")
+        data_df = pd.read_csv(url, sep=r"\s+")
         rename_cols = {c: c.replace("#", "") for c in data_df.columns if "#" in c}
         data_df.rename(columns=rename_cols, inplace=True)
         data_df, units = self.__separate_units(data_df)
@@ -384,7 +384,7 @@ class DataBuoy(object):
         """
         if "stdmet" not in self.data.keys():
             self.data["stdmet"] = {}
-        data_df = pd.read_csv(url, r"\s+")
+        data_df = pd.read_csv(url, sep=r"\s+")
         # The first column name often contains a # symbol.
         rename_cols = {c: c.replace("#", "") for c in data_df.columns if "#" in c}
         # Applying a basic fix for change in WDIR naming in earlier (<2000) data

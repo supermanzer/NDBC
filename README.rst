@@ -48,14 +48,5 @@ You can install this package using using ``pip``::
 
     pip install NDBC
 
-Methods in DataBuoy class
-^^^^^^^^^^^^^^^^^^^^^^^^^
-
-``set_station_id``
-If a DataBuoy class has been instantiated without a ``station_id`` parameter, this method provides the user a way to assign the station id.::
-     
-    from NDBC.NDBC import DataBuoy
-    DB = DataBuoy()
-    DB.set_station_id(46042)
 
     

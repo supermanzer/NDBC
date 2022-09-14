@@ -76,7 +76,7 @@ class DataBuoyTests(TestCase):
     def test_save_no_stdmet(self):
 
         self.DB.save(filename=FILE_NAME)
-        self.assertTrue(os.path.exists(filename))
+        self.assertTrue(os.path.exists(FILE_NAME))
         with open(FILE_NAME, "r") as f:
             station_json = f.read()
             self.assertIn("station_id", station_json)
