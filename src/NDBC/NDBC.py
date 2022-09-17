@@ -371,7 +371,9 @@ class DataBuoy(object):
         data_df = self.__add_datetime(data_df, datetime_index)
         data_df = self.__bad_data_check(data_df, datetime_index)
         if "data" in self.data[data_type].keys():
-            self.data[data_type]["data"] = self.data[data_type]["data"].append(data_df)
+            self.data[data_type]["data"] = pd.concat(
+                objs=[self.data[data_type]["data"], data_df]
+            )
         else:
             self.data[data_type]["data"] = data_df
 

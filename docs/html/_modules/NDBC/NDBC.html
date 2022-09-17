@@ -1,0 +1,949 @@
+
+<!DOCTYPE html>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NDBC.NDBC &#8212; NDBC 1.1.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/alabaster.css" />
+    <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+    <script src="../../_static/jquery.js"></script>
+    <script src="../../_static/underscore.js"></script>
+    <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="../../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+   
+  <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for NDBC.NDBC</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Classes pertaining to the acquisition and transformation of National Data Buoy Center (NDBC) data.</span>
+
+<span class="sd">Classes:</span>
+<span class="sd">    - DataBuoy - An initial attempt at building out a class for reading and parsing NDBC buoy data.</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">requests</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="kn">from</span> <span class="nn">deprecation</span> <span class="kn">import</span> <span class="n">deprecated</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span> <span class="k">as</span> <span class="n">dt</span>
+<span class="kn">from</span> <span class="nn">bs4</span> <span class="kn">import</span> <span class="n">BeautifulSoup</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Union</span>
+
+
+<span class="kn">from</span> <span class="nn">logging</span> <span class="kn">import</span> <span class="n">getLogger</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="DataBuoy"><a class="viewcode-back" href="../../NDBC.html#NDBC.NDBC.DataBuoy">[docs]</a><span class="k">class</span> <span class="nc">DataBuoy</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">     This class contains functions used to fetch and parse data from</span>
+<span class="sd">     National Data Buoy Center stations.</span>
+<span class="sd">    Example:</span>
+
+<span class="sd">      &gt;&gt;&gt; from NDBC.NDBC import DataBuoy</span>
+<span class="sd">      &gt;&gt;&gt; N42 = DataBuoy(&#39;46042&#39;)</span>
+<span class="sd">      &gt;&gt;&gt; N42.get_data()</span>
+<span class="sd">              &#39;June not available.&#39;</span>
+<span class="sd">      &gt;&gt;&gt; N42.data</span>
+<span class="sd">              {&#39;stdmet&#39;:       WDIR  WSPD   GST  WVHT  ...    WTMP   DEWP   VIS   TIDE</span>
+<span class="sd">          2018-04-30 23:50:00  309   9.6  11.6  2.84  ...    12.6  999.0  99.0  99.00</span>
+<span class="sd">                  ....</span>
+<span class="sd">          2018-05-31 22:50:00  304   9.3  11.4  2.02  ...    12.8  999.0  99.0  99.00</span>
+<span class="sd">          [742 rows x 13 columns]}</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># DEFINING CONSTANTS</span>
+    <span class="c1"># This defines the types of data packages we can collect, including the common English</span>
+    <span class="c1"># name and the character used in the NDBC URL for the data</span>
+    <span class="n">DATA_PACKAGES</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;stdmet&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Standard meteorological data&quot;</span><span class="p">,</span> <span class="s2">&quot;url_char&quot;</span><span class="p">:</span> <span class="s2">&quot;h&quot;</span><span class="p">},</span>
+        <span class="s2">&quot;cwind&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Continuos Wind Data&quot;</span><span class="p">,</span> <span class="s2">&quot;url_char&quot;</span><span class="p">:</span> <span class="s2">&quot;c&quot;</span><span class="p">},</span>
+        <span class="s2">&quot;swden&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Spectral Wave Density data&quot;</span><span class="p">,</span> <span class="s2">&quot;url_char&quot;</span><span class="p">:</span> <span class="s2">&quot;w&quot;</span><span class="p">},</span>
+        <span class="s2">&quot;swdir&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Spectral wave (alpha1) direction data&quot;</span><span class="p">,</span> <span class="s2">&quot;url_char&quot;</span><span class="p">:</span> <span class="s2">&quot;d&quot;</span><span class="p">},</span>
+        <span class="s2">&quot;swdir2&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Spectral wave (alpha2) direction data&quot;</span><span class="p">,</span> <span class="s2">&quot;url_char&quot;</span><span class="p">:</span> <span class="s2">&quot;i&quot;</span><span class="p">},</span>
+        <span class="s2">&quot;swr1&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Spectral wave (r1) direction data&quot;</span><span class="p">,</span> <span class="s2">&quot;url_char&quot;</span><span class="p">:</span> <span class="s2">&quot;j&quot;</span><span class="p">},</span>
+        <span class="s2">&quot;swr2&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Spectral wave (r2) direction data&quot;</span><span class="p">,</span> <span class="s2">&quot;url_char&quot;</span><span class="p">:</span> <span class="s2">&quot;k&quot;</span><span class="p">},</span>
+        <span class="s2">&quot;srad&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;Solar radiation data&quot;</span><span class="p">,</span> <span class="s2">&quot;url_char&quot;</span><span class="p">:</span> <span class="s2">&quot;r&quot;</span><span class="p">},</span>
+    <span class="p">}</span>
+    <span class="n">SEARCH_TYPES</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;radial&quot;</span><span class="p">:</span> <span class="s2">&quot;radial_search.php&quot;</span><span class="p">,</span> <span class="s2">&quot;box&quot;</span><span class="p">:</span> <span class="s2">&quot;box_search.php&quot;</span><span class="p">}</span>
+    <span class="n">UOMS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;metric&quot;</span><span class="p">:</span> <span class="s2">&quot;M&quot;</span><span class="p">,</span> <span class="s2">&quot;english&quot;</span><span class="p">:</span> <span class="s2">&quot;E&quot;</span><span class="p">}</span>
+    <span class="n">OBS_TYPES</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;buoy&quot;</span><span class="p">:</span> <span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="s2">&quot;ship&quot;</span><span class="p">:</span> <span class="s2">&quot;S&quot;</span><span class="p">,</span> <span class="s2">&quot;all&quot;</span><span class="p">:</span> <span class="s2">&quot;A&quot;</span><span class="p">}</span>
+    <span class="n">BASE_URL</span> <span class="o">=</span> <span class="s2">&quot;https://www.ndbc.noaa.gov/&quot;</span>
+    <span class="n">STATION_URL</span> <span class="o">=</span> <span class="n">BASE_URL</span> <span class="o">+</span> <span class="s2">&quot;station_page.php?station=</span><span class="si">{}</span><span class="s2">&quot;</span>
+    <span class="c1"># REGEX PATTERNS FOR PARSING HTML STATION PAGES</span>
+    <span class="n">LAT_PAT</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;\d+\.\d+\s+N&quot;</span>
+    <span class="n">LON_PAT</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;\d+\.\d+\s+W&quot;</span>
+    <span class="n">ATTR_PAT</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;&lt;b&gt;(.*):&lt;/b&gt;\s*(.*)&lt;br/&gt;&quot;</span>
+    <span class="c1"># Defining some template strings as class variables that will be</span>
+    <span class="c1"># used to define specific data URLS for each instance.</span>
+    <span class="n">data_monthurls</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="s2">&quot;https://www.ndbc.noaa.gov/data/</span><span class="si">{dtype}</span><span class="s2">/</span><span class="si">{month_abbrv}</span><span class="s2">/</span><span class="si">{station}</span><span class="s2">.txt&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;https://www.ndbc.noaa.gov/view_text_file.php?filename=</span><span class="si">{station}</span><span class="s2">{&quot;</span>
+        <span class="s2">&quot;month_num}</span><span class="si">{year}</span><span class="s2">.txt.gz&amp;dir=data/</span><span class="si">{dtype}</span><span class="s2">/</span><span class="si">{month_abbrv}</span><span class="s2">/&quot;</span><span class="p">,</span>
+    <span class="p">]</span>
+
+    <span class="n">data_yearurls</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="s2">&quot;https://www.ndbc.noaa.gov/view_text_file.php?filename={&quot;</span>
+        <span class="s2">&quot;station}</span><span class="si">{url_char}{year}</span><span class="s2">.txt.gz&amp;dir=data/historical/</span><span class="si">{dtype}</span><span class="s2">/&quot;</span>
+    <span class="p">]</span>
+
+    <span class="c1"># DEFINING METHODS</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">station_id</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize object instance</span>
+<span class="sd">        :param station_id: Station identifier &lt;- required for data access</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">station_id</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">station_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">station_id</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Overriding the default __str__ method to be a bit more descriptive.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="s2">&quot;NDBC.DataBuoy Object for Station &quot;</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">station_id</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Matching __str__ format</span>
+<span class="sd">        :return: string</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="fm">__str__</span><span class="p">()</span>
+
+<div class="viewcode-block" id="DataBuoy.set_station_id"><a class="viewcode-back" href="../../NDBC.html#NDBC.NDBC.DataBuoy.set_station_id">[docs]</a>    <span class="k">def</span> <span class="nf">set_station_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">station_id</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">station_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">station_id</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span></div>
+
+    <span class="c1"># ---------------- DEFINING PROPERTY DATA ACCESS ---------------------</span>
+    <span class="c1"># DEFINING PROPRETY METHDOS TO RETURN DATAFRAMES USING DOT NOTATION</span>
+    <span class="k">def</span> <span class="nf">__get_dataframe</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pkg</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Defining data acces method used by data package properties</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            pkg (str): String identifying data package to be return</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            pd.DataFrame|str: Dataframe if pkg in data dictionary, else string.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">pkg</span><span class="p">][</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">pkg</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+            <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">pkg</span><span class="si">}</span><span class="s2"> not found in data dictionary for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="fm">__str__</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">stdmet</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">pkg</span> <span class="o">=</span> <span class="s2">&quot;stdmet&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__get_dataframe</span><span class="p">(</span><span class="n">pkg</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">cwind</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">pkg</span> <span class="o">=</span> <span class="s2">&quot;cwind&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__get_dataframe</span><span class="p">(</span><span class="n">pkg</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">swden</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">pkg</span> <span class="o">=</span> <span class="s2">&quot;swden&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__get_dataframe</span><span class="p">(</span><span class="n">pkg</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">swdir</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">pkg</span> <span class="o">=</span> <span class="s2">&quot;swdir&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__get_dataframe</span><span class="p">(</span><span class="n">pkg</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">swdir2</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">pkg</span> <span class="o">=</span> <span class="s2">&quot;swdir2&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__get_dataframe</span><span class="p">(</span><span class="n">pkg</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">swr1</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">pkg</span> <span class="o">=</span> <span class="s2">&quot;swr1&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__get_dataframe</span><span class="p">(</span><span class="n">pkg</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">swr2</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">pkg</span> <span class="o">=</span> <span class="s2">&quot;swr2&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__get_dataframe</span><span class="p">(</span><span class="n">pkg</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">srad</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">pkg</span> <span class="o">=</span> <span class="s2">&quot;srad&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__get_dataframe</span><span class="p">(</span><span class="n">pkg</span><span class="p">)</span>
+
+    <span class="c1"># DEFINING DATA FETCHING &amp; PARSING FUNCTIONS</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">__check_urls__</span><span class="p">(</span><span class="n">urls</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Simple method to check list of urls, check if they return a 200 status</span>
+<span class="sd">        code with a HEAD request, and return the first valid URL (if any).</span>
+<span class="sd">        :param urls: The list of urls to check</span>
+<span class="sd">        :return: The valid URL or False if none</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">url_check</span> <span class="o">=</span> <span class="p">[</span><span class="n">requests</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="n">url</span><span class="p">)</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">200</span> <span class="k">for</span> <span class="n">url</span> <span class="ow">in</span> <span class="n">urls</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">urls</span><span class="p">[</span><span class="n">url_check</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="kc">True</span><span class="p">)]</span> <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">url_check</span><span class="p">)</span> <span class="k">else</span> <span class="kc">False</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">__build_urls__</span><span class="p">(</span><span class="n">urls</span><span class="p">,</span> <span class="n">format_kwargs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">url</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">**</span><span class="n">format_kwargs</span><span class="p">)</span> <span class="k">for</span> <span class="n">url</span> <span class="ow">in</span> <span class="n">urls</span><span class="p">]</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">__bad_data_func</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">n</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Check an individual value from NDBC data files to see if it meets the</span>
+<span class="sd">        standard for NDBC bad data flag.</span>
+<span class="sd">        :param x: The value being checked</span>
+<span class="sd">        :param n: the max length of the values for a given metric.</span>
+<span class="sd">        :return: Value if valid, None if not.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">val</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">NaN</span>
+            <span class="k">if</span> <span class="nb">all</span><span class="p">([</span><span class="n">d</span> <span class="o">==</span> <span class="s2">&quot;9&quot;</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">x</span><span class="p">))])</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">x</span><span class="p">)))</span> <span class="o">==</span> <span class="n">n</span>
+            <span class="k">else</span> <span class="n">x</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">val</span>
+
+    <span class="k">def</span> <span class="nf">__bad_data_check</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">df</span><span class="p">,</span> <span class="n">datetime_index</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Replace NDBC bad data flag with NumPy NaN&quot;&quot;&quot;</span>
+        <span class="n">cols</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">to_list</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">datetime_index</span><span class="p">:</span>
+            <span class="n">cols</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="s2">&quot;datetime&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">cols</span><span class="p">:</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="n">col</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">())))</span>
+            <span class="n">df</span><span class="p">[</span><span class="n">col</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">col</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__bad_data_func</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="n">n</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">df</span>
+
+    <span class="k">def</span> <span class="nf">__parse_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">element</span><span class="p">,</span> <span class="n">station_metadata</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Parse out station meta data from the element containing it</span>
+<span class="sd">        :param element: BeautifulSoup element containing station metadata</span>
+<span class="sd">        :return: None: Meta data appended to DataBuoy object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">station_metadata</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">station_metadata</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="c1"># There&#39;s probably a more elegant way to do this but trying to</span>
+        <span class="c1"># optimize code before you write it is a fool&#39;s errand.</span>
+        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">element</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">LAT_PAT</span><span class="p">,</span> <span class="n">line</span><span class="p">):</span>
+                <span class="n">station_metadata</span><span class="p">[</span><span class="s2">&quot;lat&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">LAT_PAT</span><span class="p">,</span> <span class="n">line</span><span class="p">)</span><span class="o">.</span><span class="n">group</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">LON_PAT</span><span class="p">,</span> <span class="n">line</span><span class="p">):</span>
+                <span class="n">station_metadata</span><span class="p">[</span><span class="s2">&quot;lon&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">LON_PAT</span><span class="p">,</span> <span class="n">line</span><span class="p">)</span><span class="o">.</span><span class="n">group</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ATTR_PAT</span><span class="p">,</span> <span class="n">line</span><span class="p">):</span>
+                <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ATTR_PAT</span><span class="p">,</span> <span class="n">line</span><span class="p">)</span><span class="o">.</span><span class="n">groups</span><span class="p">()</span>
+                <span class="n">station_metadata</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">station_info</span> <span class="o">=</span> <span class="n">station_metadata</span>
+
+<div class="viewcode-block" id="DataBuoy.get_station_metadata"><a class="viewcode-back" href="../../NDBC.html#NDBC.NDBC.DataBuoy.get_station_metadata">[docs]</a>    <span class="k">def</span> <span class="nf">get_station_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Define method to capture and store station metadata</span>
+<span class="sd">        :return: None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;station_id&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">LookupError</span><span class="p">(</span><span class="s2">&quot;No station ID provided&quot;</span><span class="p">)</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">STATION_URL</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">station_id</span><span class="p">))</span>
+        <span class="n">soup</span> <span class="o">=</span> <span class="n">BeautifulSoup</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="s2">&quot;html.parser&quot;</span><span class="p">)</span>
+        <span class="n">meta_div</span> <span class="o">=</span> <span class="n">soup</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;div&quot;</span><span class="p">,</span> <span class="nb">id</span><span class="o">=</span><span class="s2">&quot;stn_metadata&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">meta_div</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">meta_div</span><span class="o">.</span><span class="n">find_all</span><span class="p">(</span><span class="s2">&quot;p&quot;</span><span class="p">):</span>
+                <span class="c1"># Iterate over &lt;p&gt; tags.  One of these will have the station</span>
+                <span class="c1"># details we are looking for.</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">LAT_PAT</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">el</span><span class="p">))</span>
+                    <span class="ow">and</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">LON_PAT</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">el</span><span class="p">))</span>
+                    <span class="ow">and</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ATTR_PAT</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">el</span><span class="p">))</span>
+                <span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">__parse_metadata</span><span class="p">(</span><span class="n">el</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Station metadata not found&quot;</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">__separate_units</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        If data DataFrame contains a row that corresponds to the units for</span>
+<span class="sd">        the columns provided, separate them out and place them in stdmet</span>
+<span class="sd">        metadata.</span>
+<span class="sd">        :param data: pandas DataFrame result of reading in NDBC text file.</span>
+<span class="sd">        :return: data DataFrame with units row removed, if present</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Check to see if the first row is the units - true after 2009 for stdmet.</span>
+        <span class="n">unit_dict</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">],</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">data</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;#&quot;</span><span class="p">:</span>
+            <span class="n">units</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">columns</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">columns</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">drop</span><span class="p">([</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">unit_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">units</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">columns</span><span class="p">)}</span>
+            <span class="c1"># if &quot;meta&quot; not in self.data[&quot;stdmet&quot;].keys():</span>
+            <span class="c1">#     self.data[&quot;stdmet&quot;][&quot;meta&quot;] = {}</span>
+            <span class="c1"># self.data[&quot;stdmet&quot;][&quot;meta&quot;][&quot;units&quot;] = {</span>
+            <span class="c1">#     k: units[i] for i, k in enumerate(columns)</span>
+            <span class="c1"># }</span>
+        <span class="k">return</span> <span class="n">data</span><span class="p">,</span> <span class="n">unit_dict</span>
+
+    <span class="k">def</span> <span class="nf">__assign_units</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">units</span><span class="p">,</span> <span class="n">data_type</span><span class="p">):</span>
+        <span class="k">if</span> <span class="s2">&quot;meta&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">data_type</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">data_type</span><span class="p">][</span><span class="s2">&quot;meta&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">data_type</span><span class="p">][</span><span class="s2">&quot;meta&quot;</span><span class="p">][</span><span class="s2">&quot;units&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">units</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">__get_dt_parts</span><span class="p">(</span><span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Determine the date part columns and format string from df</span>
+<span class="sd">        :param df: pandas DataFrame of stdmet data</span>
+<span class="sd">        :return: dicitonary containing format string and list of columns</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Define columns and datetime string formats</span>
+        <span class="n">col_types</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;YYYY&quot;</span><span class="p">:</span> <span class="s2">&quot;%Y&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;YY&quot;</span><span class="p">:</span> <span class="s2">&quot;%Y&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;MM&quot;</span><span class="p">:</span> <span class="s2">&quot;%m&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;DD&quot;</span><span class="p">:</span> <span class="s2">&quot;</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;hh&quot;</span><span class="p">:</span> <span class="s2">&quot;%H&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;mm&quot;</span><span class="p">:</span> <span class="s2">&quot;%M&quot;</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="c1"># Identifying the date part columns in the current dataframe</span>
+        <span class="n">dt_cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span> <span class="k">if</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">col_types</span><span class="o">.</span><span class="n">keys</span><span class="p">()]</span>
+        <span class="c1"># Building the formatting string used to construct datetime objects</span>
+        <span class="n">dt_format</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">col_types</span><span class="p">[</span><span class="n">c</span><span class="p">]</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">dt_cols</span><span class="p">])</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;columns&quot;</span><span class="p">:</span> <span class="n">dt_cols</span><span class="p">,</span> <span class="s2">&quot;format_string&quot;</span><span class="p">:</span> <span class="n">dt_format</span><span class="p">}</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">__set_dtypes</span><span class="p">(</span><span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Assign data types for better comparison performance</span>
+<span class="sd">        :param df: DataFrame of data after removing units row (if exists)</span>
+<span class="sd">        :return: DataFrame object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Defining those columns most often storing integer values for</span>
+        <span class="c1"># stdmet data.  This may apply to other data packages as well</span>
+        <span class="n">int_cols</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;YY&quot;</span><span class="p">,</span> <span class="s2">&quot;MM&quot;</span><span class="p">,</span> <span class="s2">&quot;DD&quot;</span><span class="p">,</span> <span class="s2">&quot;hh&quot;</span><span class="p">,</span> <span class="s2">&quot;mm&quot;</span><span class="p">,</span> <span class="s2">&quot;WDIR&quot;</span><span class="p">]</span>
+        <span class="c1"># Remaining columns will be treated as floating point numbers</span>
+        <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">to_list</span><span class="p">():</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="s2">&quot;int32&quot;</span> <span class="k">if</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">int_cols</span> <span class="k">else</span> <span class="s2">&quot;float64&quot;</span>
+            <span class="n">df</span><span class="p">[</span><span class="n">col</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">col</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">df</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">__build_datetime</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return datetime series constructed from extracted date parts</span>
+<span class="sd">        :param data:Standard meteorological data</span>
+<span class="sd">        :return: list of Python datetime instances.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">dtdict</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">__get_dt_parts</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="c1"># Addressing issues with 2 digit years (pre 1996 data)</span>
+        <span class="n">year_column</span> <span class="o">=</span> <span class="n">dtdict</span><span class="p">[</span><span class="s2">&quot;columns&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">data</span><span class="p">[</span><span class="n">year_column</span><span class="p">]</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">100</span><span class="p">:</span>
+            <span class="n">data</span><span class="p">[</span><span class="n">year_column</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="n">year_column</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1900</span>
+        <span class="c1"># Return a list of datetime objects for each row in dataframe</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="n">dt</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span>
+                <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">v</span><span class="p">))</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">dtdict</span><span class="p">[</span><span class="s2">&quot;columns&quot;</span><span class="p">]]),</span>
+                <span class="n">dtdict</span><span class="p">[</span><span class="s2">&quot;format_string&quot;</span><span class="p">],</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">itertuples</span><span class="p">()</span>
+        <span class="p">]</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">__add_datetime</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">datetime_index</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Append datetime either as a column or record index</span>
+<span class="sd">        :param data: pandas Dataframe of stdmet data</span>
+<span class="sd">        :param datetime_index: Whether datetimes will be appended as column</span>
+<span class="sd">        or dataframe index</span>
+<span class="sd">        :return: dataframe with datetime appended and date part columns dopped</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Getting the list of dates to add</span>
+        <span class="n">dt_list</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">__build_datetime</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="c1"># Get list of columns to drop</span>
+        <span class="n">dt_cols</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">__get_dt_parts</span><span class="p">(</span><span class="n">data</span><span class="p">)[</span><span class="s2">&quot;columns&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">datetime_index</span><span class="p">:</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">dt_list</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">data</span><span class="p">[</span><span class="s2">&quot;datetime&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dt_list</span>
+
+        <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="n">dt_cols</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__load_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">datetime_index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">data_type</span><span class="o">=</span><span class="s2">&quot;stdmet&quot;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Load retrieved data as part of object</span>
+<span class="sd">        :param url: Verified URL for given station and data type</span>
+<span class="sd">        :param datetime_index: Use datetime value as index (True) or column (False)</span>
+<span class="sd">        :param data_type: Type of data package to retrieve</span>
+<span class="sd">        :return: None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">data_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">data_type</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">data_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">sep</span><span class="o">=</span><span class="sa">r</span><span class="s2">&quot;\s+&quot;</span><span class="p">)</span>
+        <span class="n">rename_cols</span> <span class="o">=</span> <span class="p">{</span><span class="n">c</span><span class="p">:</span> <span class="n">c</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;#&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">data_df</span><span class="o">.</span><span class="n">columns</span> <span class="k">if</span> <span class="s2">&quot;#&quot;</span> <span class="ow">in</span> <span class="n">c</span><span class="p">}</span>
+        <span class="n">data_df</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="n">rename_cols</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">data_df</span><span class="p">,</span> <span class="n">units</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__separate_units</span><span class="p">(</span><span class="n">data_df</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">units</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__assign_units</span><span class="p">(</span><span class="n">units</span><span class="p">,</span> <span class="n">data_type</span><span class="p">)</span>
+        <span class="n">data_df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__set_dtypes</span><span class="p">(</span><span class="n">data_df</span><span class="p">)</span>
+        <span class="n">data_df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__add_datetime</span><span class="p">(</span><span class="n">data_df</span><span class="p">,</span> <span class="n">datetime_index</span><span class="p">)</span>
+        <span class="n">data_df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__bad_data_check</span><span class="p">(</span><span class="n">data_df</span><span class="p">,</span> <span class="n">datetime_index</span><span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;data&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">data_type</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">data_type</span><span class="p">][</span><span class="s2">&quot;data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span>
+                <span class="n">objs</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">data_type</span><span class="p">][</span><span class="s2">&quot;data&quot;</span><span class="p">],</span> <span class="n">data_df</span><span class="p">]</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">data_type</span><span class="p">][</span><span class="s2">&quot;data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data_df</span>
+
+<div class="viewcode-block" id="DataBuoy.load_stdmet"><a class="viewcode-back" href="../../NDBC.html#NDBC.NDBC.DataBuoy.load_stdmet">[docs]</a>    <span class="k">def</span> <span class="nf">load_stdmet</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">datetime_index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Transform NDBC Standard Meteorological text data into pandas Dataframe</span>
+<span class="sd">        and append to results</span>
+<span class="sd">        :param url: Location of text data</span>
+<span class="sd">        :return: None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="s2">&quot;stdmet&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;stdmet&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">data_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">sep</span><span class="o">=</span><span class="sa">r</span><span class="s2">&quot;\s+&quot;</span><span class="p">)</span>
+        <span class="c1"># The first column name often contains a # symbol.</span>
+        <span class="n">rename_cols</span> <span class="o">=</span> <span class="p">{</span><span class="n">c</span><span class="p">:</span> <span class="n">c</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;#&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">data_df</span><span class="o">.</span><span class="n">columns</span> <span class="k">if</span> <span class="s2">&quot;#&quot;</span> <span class="ow">in</span> <span class="n">c</span><span class="p">}</span>
+        <span class="c1"># Applying a basic fix for change in WDIR naming in earlier (&lt;2000) data</span>
+        <span class="n">rename_cols</span><span class="p">[</span><span class="s2">&quot;WD&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;WDIR&quot;</span>
+
+        <span class="n">data_df</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="n">rename_cols</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="c1"># Remove units row (if exists) and add to stdmet metadata</span>
+        <span class="n">data_df</span><span class="p">,</span> <span class="n">units</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__separate_units</span><span class="p">(</span><span class="n">data_df</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">units</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__assign_units</span><span class="p">(</span><span class="n">units</span><span class="p">,</span> <span class="n">data_type</span><span class="o">=</span><span class="s2">&quot;stdmet&quot;</span><span class="p">)</span>
+        <span class="c1"># Explicitly setting dtypes</span>
+        <span class="n">data_df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__set_dtypes</span><span class="p">(</span><span class="n">data_df</span><span class="p">)</span>
+        <span class="c1"># Building and appending datetimes from date parts</span>
+        <span class="n">data_df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__add_datetime</span><span class="p">(</span><span class="n">data_df</span><span class="p">,</span> <span class="n">datetime_index</span><span class="p">)</span>
+        <span class="c1"># Replacing NDBC bad data flags with Numpy NaNs</span>
+        <span class="n">data_df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__bad_data_check</span><span class="p">(</span><span class="n">data_df</span><span class="p">,</span> <span class="n">datetime_index</span><span class="p">)</span>
+        <span class="c1"># Append to existing stdmet dataframe if exists</span>
+        <span class="k">if</span> <span class="s2">&quot;data&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;stdmet&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;stdmet&quot;</span><span class="p">][</span><span class="s2">&quot;data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;stdmet&quot;</span><span class="p">][</span><span class="s2">&quot;data&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">data_df</span><span class="p">)</span>
+        <span class="c1"># otherwise assign dataframe to stdment[&#39;data&#39;]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;stdmet&quot;</span><span class="p">][</span><span class="s2">&quot;data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data_df</span></div>
+
+<div class="viewcode-block" id="DataBuoy.get_stdmet"><a class="viewcode-back" href="../../NDBC.html#NDBC.NDBC.DataBuoy.get_stdmet">[docs]</a>    <span class="nd">@deprecated</span><span class="p">(</span>
+        <span class="n">deprecated_in</span><span class="o">=</span><span class="s2">&quot;1.0.2&quot;</span><span class="p">,</span>
+        <span class="n">removed_in</span><span class="o">=</span><span class="s2">&quot;2.0.0&quot;</span><span class="p">,</span>
+        <span class="n">details</span><span class="o">=</span><span class="s1">&#39;Use get_data with &quot;stdmet&quot; data_type parameter instead&#39;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">def</span> <span class="nf">get_stdmet</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">years</span><span class="o">=</span><span class="p">[],</span> <span class="n">months</span><span class="o">=</span><span class="p">[],</span> <span class="n">datetime_index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Identify valid data files to append to stdmet data and call load_std()</span>
+<span class="sd">        :param years: A list of years for which to gather data</span>
+<span class="sd">        :param months: A list of months for which to gather data</span>
+<span class="sd">        :return: None or string, if times are unavailable</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">times_unavailable</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="c1"># If no time frame is specified we retrieve the most current complete</span>
+        <span class="c1"># month for the given station.</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">years</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">months</span><span class="p">:</span>
+                <span class="n">month_num</span> <span class="o">=</span> <span class="n">dt</span><span class="o">.</span><span class="n">today</span><span class="p">()</span><span class="o">.</span><span class="n">month</span>
+                <span class="n">year_num</span> <span class="o">=</span> <span class="n">dt</span><span class="o">.</span><span class="n">today</span><span class="p">()</span><span class="o">.</span><span class="n">year</span>
+                <span class="n">my_url</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="c1"># Looping through potentially available months.</span>
+                <span class="k">while</span> <span class="ow">not</span> <span class="n">my_url</span><span class="p">:</span>
+                    <span class="n">month_abbrv</span> <span class="o">=</span> <span class="n">dt</span><span class="p">(</span><span class="n">year_num</span><span class="p">,</span> <span class="n">month_num</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s2">&quot;%b&quot;</span><span class="p">)</span>
+                    <span class="n">kws</span> <span class="o">=</span> <span class="p">{</span>
+                        <span class="s2">&quot;month_abbrv&quot;</span><span class="p">:</span> <span class="n">month_abbrv</span><span class="p">,</span>
+                        <span class="s2">&quot;month_num&quot;</span><span class="p">:</span> <span class="n">month_num</span><span class="p">,</span>
+                        <span class="s2">&quot;station&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">station_id</span><span class="p">,</span>
+                        <span class="s2">&quot;year&quot;</span><span class="p">:</span> <span class="n">year_num</span><span class="p">,</span>
+                        <span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="s2">&quot;stdmet&quot;</span><span class="p">,</span>
+                    <span class="p">}</span>
+                    <span class="n">my_url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__check_urls__</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">__build_urls__</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_monthurls</span><span class="p">,</span> <span class="n">kws</span><span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">my_url</span><span class="p">:</span>
+                        <span class="n">times_unavailable</span> <span class="o">+=</span> <span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">month_abbrv</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">year_num</span><span class="si">}</span><span class="s2"> not &quot;</span> <span class="sa">f</span><span class="s2">&quot;available.</span><span class="se">\n</span><span class="s2"> &quot;</span>
+                        <span class="p">)</span>
+
+                    <span class="n">month_num</span> <span class="o">-=</span> <span class="mi">1</span>
+                    <span class="c1"># !st attempt to deal with January edge case</span>
+                    <span class="k">if</span> <span class="n">month_num</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="n">year_num</span> <span class="o">-=</span> <span class="mi">1</span>
+                        <span class="n">month_num</span> <span class="o">=</span> <span class="mi">12</span>
+                        <span class="k">if</span> <span class="n">year_num</span> <span class="o">&lt;</span> <span class="n">dt</span><span class="o">.</span><span class="n">today</span><span class="p">()</span><span class="o">.</span><span class="n">year</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+                            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">                            Recent data could not be accessed for over 1 year.</span>
+<span class="s2">                            Please review station </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">station_id</span><span class="si">}</span><span class="s2"> and data package </span><span class="si">{</span><span class="n">data_type</span><span class="si">}</span><span class="s2"></span>
+<span class="s2">                            &quot;&quot;&quot;</span>
+                <span class="k">if</span> <span class="n">my_url</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">load_stdmet</span><span class="p">(</span><span class="n">my_url</span><span class="p">,</span> <span class="n">datetime_index</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">year</span> <span class="ow">in</span> <span class="n">years</span><span class="p">:</span>
+                    <span class="n">kws</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;year&quot;</span><span class="p">:</span> <span class="n">year</span><span class="p">,</span> <span class="s2">&quot;station&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">station_id</span><span class="p">,</span> <span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="s2">&quot;stdmet&quot;</span><span class="p">}</span>
+                    <span class="n">my_url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__check_urls__</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">__build_urls__</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_yearurls</span><span class="p">,</span> <span class="n">kws</span><span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">my_url</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">load_stdmet</span><span class="p">(</span><span class="n">my_url</span><span class="p">,</span> <span class="n">datetime_index</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">times_unavailable</span> <span class="o">+=</span> <span class="s2">&quot;Year &quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">year</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot; not available.</span><span class="se">\n</span><span class="s2">&quot;</span>
+
+                <span class="k">for</span> <span class="n">month</span> <span class="ow">in</span> <span class="n">months</span><span class="p">:</span>
+                    <span class="n">month_abbrv</span> <span class="o">=</span> <span class="n">dt</span><span class="p">(</span><span class="n">dt</span><span class="o">.</span><span class="n">today</span><span class="p">()</span><span class="o">.</span><span class="n">year</span><span class="p">,</span> <span class="n">month</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s2">&quot;%b&quot;</span><span class="p">)</span>
+                    <span class="c1"># Adjusting for month wrapping cases (e.g. wanting December monthly data in January).</span>
+                    <span class="n">year</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="n">dt</span><span class="o">.</span><span class="n">today</span><span class="p">()</span><span class="o">.</span><span class="n">year</span>
+                        <span class="k">if</span> <span class="n">month</span> <span class="o">&lt;=</span> <span class="n">dt</span><span class="o">.</span><span class="n">today</span><span class="p">()</span><span class="o">.</span><span class="n">month</span>
+                        <span class="k">else</span> <span class="n">dt</span><span class="o">.</span><span class="n">today</span><span class="p">()</span><span class="o">.</span><span class="n">year</span> <span class="o">-</span> <span class="mi">1</span>
+                    <span class="p">)</span>
+                    <span class="c1"># When using the 2nd of the stdmet_monthurl patterns, two digit</span>
+                    <span class="c1"># month numbers are converted into the letters a, b, and c.</span>
+                    <span class="n">kws</span> <span class="o">=</span> <span class="p">{</span>
+                        <span class="s2">&quot;year&quot;</span><span class="p">:</span> <span class="n">year</span><span class="p">,</span>
+                        <span class="s2">&quot;month_abbrv&quot;</span><span class="p">:</span> <span class="n">month_abbrv</span><span class="p">,</span>
+                        <span class="s2">&quot;month_num&quot;</span><span class="p">:</span> <span class="n">month</span> <span class="k">if</span> <span class="n">month</span> <span class="o">&lt;</span> <span class="mi">10</span> <span class="k">else</span> <span class="nb">chr</span><span class="p">(</span><span class="mi">97</span> <span class="o">+</span> <span class="p">(</span><span class="n">month</span> <span class="o">-</span> <span class="mi">10</span><span class="p">)),</span>
+                        <span class="s2">&quot;station&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">station_id</span><span class="p">,</span>
+                        <span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="s2">&quot;stdmet&quot;</span><span class="p">,</span>
+                    <span class="p">}</span>
+                    <span class="n">my_url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__check_urls__</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">__build_urls__</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_monthurls</span><span class="p">,</span> <span class="n">kws</span><span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">my_url</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">load_stdmet</span><span class="p">(</span><span class="n">my_url</span><span class="p">,</span> <span class="n">datetime_index</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">times_unavailable</span> <span class="o">+=</span> <span class="n">month_abbrv</span> <span class="o">+</span> <span class="s2">&quot; not available.</span><span class="se">\n</span><span class="s2">&quot;</span>
+
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">times_unavailable</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">times_unavailable</span><span class="p">)</span>
+
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">SSLError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;NDBC Server unavailable: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="DataBuoy.get_data"><a class="viewcode-back" href="../../NDBC.html#NDBC.NDBC.DataBuoy.get_data">[docs]</a>    <span class="k">def</span> <span class="nf">get_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">years</span><span class="o">=</span><span class="p">[],</span> <span class="n">months</span><span class="o">=</span><span class="p">[],</span> <span class="n">datetime_index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">data_type</span><span class="o">=</span><span class="s2">&quot;stdmet&quot;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Fetch data paylod for a given NDBC data station.</span>
+<span class="sd">        :param years: List of years</span>
+<span class="sd">        :param months: List of months</span>
+<span class="sd">        :param datetime_index: Whether to use datetime as DataFrame index or column</span>
+<span class="sd">        :param data_type: Data payload type</span>
+<span class="sd">        :return: None, data stored as part of Class object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">data_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">DATA_PACKAGES</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">pkgs</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">DATA_PACKAGES</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="s2">&quot;name&quot;</span><span class="p">]}</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">DATA_PACKAGES</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+            <span class="p">]</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">                Data type </span><span class="si">{</span><span class="n">data_type</span><span class="si">}</span><span class="s2"> not understood.  Please use one of the following</span>
+<span class="s2">                identified data packages:</span>
+<span class="s2">                </span><span class="si">{</span><span class="n">pkgs</span><span class="si">}</span><span class="s2"></span>
+<span class="s2">            &quot;&quot;&quot;</span>
+            <span class="p">)</span>
+        <span class="n">times_unavailable</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="c1"># If no time frame is specified we retrieve the most current complete</span>
+        <span class="c1"># month for the given station.</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">years</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">months</span><span class="p">:</span>
+                <span class="n">month_num</span> <span class="o">=</span> <span class="n">dt</span><span class="o">.</span><span class="n">today</span><span class="p">()</span><span class="o">.</span><span class="n">month</span>
+                <span class="n">year_num</span> <span class="o">=</span> <span class="n">dt</span><span class="o">.</span><span class="n">today</span><span class="p">()</span><span class="o">.</span><span class="n">year</span>
+                <span class="n">my_url</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="c1"># Looping through potentially available months.</span>
+                <span class="k">while</span> <span class="ow">not</span> <span class="n">my_url</span><span class="p">:</span>
+                    <span class="n">month_abbrv</span> <span class="o">=</span> <span class="n">dt</span><span class="p">(</span><span class="n">year_num</span><span class="p">,</span> <span class="n">month_num</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s2">&quot;%b&quot;</span><span class="p">)</span>
+                    <span class="n">kws</span> <span class="o">=</span> <span class="p">{</span>
+                        <span class="s2">&quot;month_abbrv&quot;</span><span class="p">:</span> <span class="n">month_abbrv</span><span class="p">,</span>
+                        <span class="s2">&quot;month_num&quot;</span><span class="p">:</span> <span class="n">month_num</span><span class="p">,</span>
+                        <span class="s2">&quot;station&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">station_id</span><span class="p">,</span>
+                        <span class="s2">&quot;year&quot;</span><span class="p">:</span> <span class="n">year_num</span><span class="p">,</span>
+                        <span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="n">data_type</span><span class="p">,</span>
+                    <span class="p">}</span>
+                    <span class="n">my_url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__check_urls__</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">__build_urls__</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_monthurls</span><span class="p">,</span> <span class="n">kws</span><span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">my_url</span><span class="p">:</span>
+                        <span class="n">times_unavailable</span> <span class="o">+=</span> <span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">month_abbrv</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">year_num</span><span class="si">}</span><span class="s2"> not &quot;</span> <span class="sa">f</span><span class="s2">&quot;available.</span><span class="se">\n</span><span class="s2"> &quot;</span>
+                        <span class="p">)</span>
+
+                    <span class="n">month_num</span> <span class="o">-=</span> <span class="mi">1</span>
+                    <span class="c1"># 1st attempt to deal with January edge case</span>
+                    <span class="k">if</span> <span class="n">month_num</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="n">year_num</span> <span class="o">-=</span> <span class="mi">1</span>
+                        <span class="n">month_num</span> <span class="o">=</span> <span class="mi">12</span>
+                        <span class="k">if</span> <span class="n">year_num</span> <span class="o">&lt;</span> <span class="n">dt</span><span class="o">.</span><span class="n">today</span><span class="p">()</span><span class="o">.</span><span class="n">year</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+                            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">                            Recent data could not be accessed for over 1 year.</span>
+<span class="s2">                            Please review station </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">station_id</span><span class="si">}</span><span class="s2"> and data package </span><span class="si">{</span><span class="n">data_type</span><span class="si">}</span><span class="s2"></span>
+<span class="s2">                            &quot;&quot;&quot;</span>
+                <span class="k">if</span> <span class="n">my_url</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">__load_data</span><span class="p">(</span>
+                        <span class="n">my_url</span><span class="p">,</span> <span class="n">datetime_index</span><span class="o">=</span><span class="n">datetime_index</span><span class="p">,</span> <span class="n">data_type</span><span class="o">=</span><span class="n">data_type</span>
+                    <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">year</span> <span class="ow">in</span> <span class="n">years</span><span class="p">:</span>
+                    <span class="n">kws</span> <span class="o">=</span> <span class="p">{</span>
+                        <span class="s2">&quot;year&quot;</span><span class="p">:</span> <span class="n">year</span><span class="p">,</span>
+                        <span class="s2">&quot;station&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">station_id</span><span class="p">,</span>
+                        <span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="n">data_type</span><span class="p">,</span>
+                        <span class="s2">&quot;url_char&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">DATA_PACKAGES</span><span class="p">[</span><span class="n">data_type</span><span class="p">][</span><span class="s2">&quot;url_char&quot;</span><span class="p">],</span>
+                    <span class="p">}</span>
+                    <span class="n">my_url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__check_urls__</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">__build_urls__</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_yearurls</span><span class="p">,</span> <span class="n">kws</span><span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">my_url</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">__load_data</span><span class="p">(</span>
+                            <span class="n">my_url</span><span class="p">,</span> <span class="n">datetime_index</span><span class="o">=</span><span class="n">datetime_index</span><span class="p">,</span> <span class="n">data_type</span><span class="o">=</span><span class="n">data_type</span>
+                        <span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">times_unavailable</span> <span class="o">+=</span> <span class="s2">&quot;Year &quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">year</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot; not available.</span><span class="se">\n</span><span class="s2">&quot;</span>
+
+                <span class="k">for</span> <span class="n">month</span> <span class="ow">in</span> <span class="n">months</span><span class="p">:</span>
+                    <span class="n">month_abbrv</span> <span class="o">=</span> <span class="n">dt</span><span class="p">(</span><span class="n">dt</span><span class="o">.</span><span class="n">today</span><span class="p">()</span><span class="o">.</span><span class="n">year</span><span class="p">,</span> <span class="n">month</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s2">&quot;%b&quot;</span><span class="p">)</span>
+                    <span class="c1"># Adjusting for month wrapping cases (e.g. wanting December monthly data in January).</span>
+                    <span class="n">year</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="n">dt</span><span class="o">.</span><span class="n">today</span><span class="p">()</span><span class="o">.</span><span class="n">year</span>
+                        <span class="k">if</span> <span class="n">month</span> <span class="o">&lt;=</span> <span class="n">dt</span><span class="o">.</span><span class="n">today</span><span class="p">()</span><span class="o">.</span><span class="n">month</span>
+                        <span class="k">else</span> <span class="n">dt</span><span class="o">.</span><span class="n">today</span><span class="p">()</span><span class="o">.</span><span class="n">year</span> <span class="o">-</span> <span class="mi">1</span>
+                    <span class="p">)</span>
+                    <span class="c1"># When using the 2nd of the stdmet_monthurl patterns, two digit</span>
+                    <span class="c1"># month numbers are converted into the letters a, b, and c.</span>
+                    <span class="n">kws</span> <span class="o">=</span> <span class="p">{</span>
+                        <span class="s2">&quot;year&quot;</span><span class="p">:</span> <span class="n">year</span><span class="p">,</span>
+                        <span class="s2">&quot;month_abbrv&quot;</span><span class="p">:</span> <span class="n">month_abbrv</span><span class="p">,</span>
+                        <span class="s2">&quot;month_num&quot;</span><span class="p">:</span> <span class="n">month</span> <span class="k">if</span> <span class="n">month</span> <span class="o">&lt;</span> <span class="mi">10</span> <span class="k">else</span> <span class="nb">chr</span><span class="p">(</span><span class="mi">97</span> <span class="o">+</span> <span class="p">(</span><span class="n">month</span> <span class="o">-</span> <span class="mi">10</span><span class="p">)),</span>
+                        <span class="s2">&quot;station&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">station_id</span><span class="p">,</span>
+                        <span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="n">data_type</span><span class="p">,</span>
+                    <span class="p">}</span>
+                    <span class="n">my_url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__check_urls__</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">__build_urls__</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_monthurls</span><span class="p">,</span> <span class="n">kws</span><span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">my_url</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">__load_data</span><span class="p">(</span>
+                            <span class="n">my_url</span><span class="p">,</span> <span class="n">datetime_index</span><span class="o">=</span><span class="n">datetime_index</span><span class="p">,</span> <span class="n">data_type</span><span class="o">=</span><span class="n">data_type</span>
+                        <span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">times_unavailable</span> <span class="o">+=</span> <span class="n">month_abbrv</span> <span class="o">+</span> <span class="s2">&quot; not available.</span><span class="se">\n</span><span class="s2">&quot;</span>
+
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">times_unavailable</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">station_data_url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;https://www.ndbc.noaa.gov/station_history.php?station=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">station_id</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">times_unavailable</span> <span class="o">+=</span> <span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Please review available station data:</span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">station_data_url</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">times_unavailable</span><span class="p">)</span>
+
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">SSLError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;NDBC Server unavailable: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+    <span class="c1"># -------------------- STATION SEARCH METHODS ------------------------------</span>
+    <span class="c1"># https: // www.ndbc.noaa.gov / radial_search.php?lat1 = 36.79 &amp; lon1 = \</span>
+    <span class="c1">#  -122.4 &amp; uom = M &amp; dist = 50 &amp; ot = B &amp; time = -1</span>
+    <span class="c1"># URL generated for radial search lat = 36.79, lon = -122.4,</span>
+    <span class="c1"># uom = Metric, distance = 50 km, observation type = moored buoy, time =</span>
+    <span class="c1"># t - 1 hour</span>
+
+    <span class="c1"># https: // www.ndbc.noaa.gov / radial_search.php?lat1 = 36.79 &amp; lon1 =</span>
+    <span class="c1"># -122.4 &amp; uom = E &amp; dist = 50 &amp; ot = B &amp; time = 1</span>
+    <span class="c1"># URL generated for radial search with uom = English, distance = 50</span>
+    <span class="c1"># miles, observation type = moored buoy, time = within the past 1 hour.</span>
+
+    <span class="c1"># https://www.ndbc.noaa.gov/box_search.php?lat1=36.785+N&amp;lat2=37.125+N&amp;</span>
+    <span class="c1"># lon1=-122.4&amp;lon2=-121.4&amp;uom=M&amp;ot=A&amp;time=1</span>
+    <span class="c1"># URL box search with Metric measurements in the past hour</span>
+
+    <span class="k">def</span> <span class="nf">_ss_args_check</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">search_type</span><span class="o">=</span><span class="s2">&quot;radial&quot;</span><span class="p">,</span>
+        <span class="n">lat1</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">lat2</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">lon1</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">lon2</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">uom</span><span class="o">=</span><span class="s2">&quot;metric&quot;</span><span class="p">,</span>
+        <span class="n">time</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">obs_type</span><span class="o">=</span><span class="s2">&quot;buoy&quot;</span><span class="p">,</span>
+        <span class="n">distance</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Station Search arguments checking&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">search_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">SEARCH_TYPES</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Invalid search type. Please use one of the &quot;</span>
+                <span class="sa">f</span><span class="s1">&#39;following: </span><span class="si">{</span><span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">SEARCH_TYPES</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="si">}</span><span class="s1">&#39;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">uom</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">UOMS</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Invalid UOM. Please use one of the following: &quot;</span>
+                <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">UOMS</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="si">}</span><span class="s1">&#39;</span>
+            <span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">obs_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">OBS_TYPES</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Invalid observation type.  Please use one of the &quot;</span>
+                <span class="sa">f</span><span class="s1">&#39;following: </span><span class="si">{</span><span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">OBS_TYPES</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="si">}</span><span class="s1">&#39;</span>
+            <span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">time</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">int</span> <span class="ow">or</span> <span class="nb">abs</span><span class="p">(</span><span class="n">time</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">23</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Time arg must be an integer with an absolute &quot;</span> <span class="s2">&quot;value of 23 or less.&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># ASSIGNING LAT1 AND LON1</span>
+        <span class="n">lat1</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">lat1</span>
+            <span class="k">if</span> <span class="n">lat1</span>
+            <span class="k">else</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">station_info</span><span class="p">[</span><span class="s2">&quot;lat&quot;</span><span class="p">]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">station_info</span><span class="p">[</span><span class="s2">&quot;lat&quot;</span><span class="p">]</span> <span class="k">else</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">lon1</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">lon1</span>
+            <span class="k">if</span> <span class="n">lon1</span>
+            <span class="k">else</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">station_info</span><span class="p">[</span><span class="s2">&quot;lon&quot;</span><span class="p">]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">station_info</span><span class="p">[</span><span class="s2">&quot;lon&quot;</span><span class="p">]</span> <span class="k">else</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="c1"># VALIDATING COORDINATES/ARGS FOR SEARCH TYPES</span>
+        <span class="k">if</span> <span class="n">search_type</span> <span class="o">==</span> <span class="s2">&quot;radial&quot;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">([</span><span class="n">lat1</span><span class="p">,</span> <span class="n">lon1</span><span class="p">,</span> <span class="n">distance</span><span class="p">]):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Radial search requires lat, lon, and distance.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">search_type</span> <span class="o">==</span> <span class="s2">&quot;box&quot;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">([</span><span class="n">lat1</span><span class="p">,</span> <span class="n">lat2</span><span class="p">,</span> <span class="n">lon1</span><span class="p">,</span> <span class="n">lon2</span><span class="p">]):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Box search requires two lat and lon pairs.&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">lat1</span><span class="p">,</span> <span class="n">lon1</span>
+
+    <span class="k">def</span> <span class="nf">_ss_build_url</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">search_type</span><span class="p">,</span>
+        <span class="n">lat1</span><span class="p">,</span>
+        <span class="n">lat2</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">lon1</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">lon2</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">uom</span><span class="o">=</span><span class="s2">&quot;metric&quot;</span><span class="p">,</span>
+        <span class="n">time</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">obs_type</span><span class="o">=</span><span class="s2">&quot;buoy&quot;</span><span class="p">,</span>
+        <span class="n">distance</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+
+        <span class="n">search_url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">BASE_URL</span><span class="si">}{</span><span class="bp">self</span><span class="o">.</span><span class="n">SEARCH_TYPES</span><span class="p">[</span><span class="n">search_type</span><span class="p">]</span><span class="si">}</span><span class="s2">?&quot;</span>
+
+        <span class="k">if</span> <span class="n">search_type</span> <span class="o">==</span> <span class="s2">&quot;radial&quot;</span><span class="p">:</span>
+            <span class="n">search_url</span> <span class="o">+=</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;lat1=</span><span class="si">{</span><span class="n">lat1</span><span class="si">}</span><span class="s2">&amp;lon1=</span><span class="si">{</span><span class="n">lon1</span><span class="si">}</span><span class="s2">&amp;uom=&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">UOMS</span><span class="p">[</span><span class="n">uom</span><span class="p">]</span><span class="si">}</span><span class="s2">&amp;dist=</span><span class="si">{</span><span class="n">distance</span><span class="si">}</span><span class="s2">&amp;ot=&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">OBS_TYPES</span><span class="p">[</span><span class="n">obs_type</span><span class="p">]</span><span class="si">}</span><span class="s2">&amp;time=</span><span class="si">{</span><span class="n">time</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">search_type</span> <span class="o">==</span> <span class="s2">&quot;box&quot;</span><span class="p">:</span>
+            <span class="n">search_url</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;lat1=</span><span class="si">{</span><span class="n">lat1</span><span class="si">}</span><span class="s2">&amp;lat2=</span><span class="si">{</span><span class="n">lat2</span><span class="si">}</span><span class="s2">&amp;lon1=</span><span class="si">{</span><span class="n">lon1</span><span class="si">}</span><span class="s2">&amp;lon2=</span><span class="si">{</span><span class="n">lon2</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">search_url</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;&amp;uom=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">UOMS</span><span class="p">[</span><span class="n">uom</span><span class="p">]</span><span class="si">}</span><span class="s2">&amp;ot=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">OBS_TYPES</span><span class="p">[</span><span class="n">obs_type</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">search_url</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;&amp;time=</span><span class="si">{</span><span class="n">time</span><span class="si">}</span><span class="s2">&quot;</span>
+
+        <span class="k">return</span> <span class="n">search_url</span>
+
+    <span class="k">def</span> <span class="nf">_ss_parse_response</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Make request using URL provided and parse the response for a list of</span>
+<span class="sd">        unique station IDs.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+        <span class="c1"># Checking the validity of our response</span>
+        <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="mi">200</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;The url generated </span><span class="se">\n</span><span class="s2"> </span><span class="si">{</span><span class="n">url</span><span class="si">}</span><span class="s2"> </span><span class="se">\n</span><span class="s2"> returned a &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;status code of </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="c1"># Parsing the HTML returned</span>
+        <span class="n">soup</span> <span class="o">=</span> <span class="n">BeautifulSoup</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="s2">&quot;html.parser&quot;</span><span class="p">)</span>
+        <span class="c1"># The station IDs returned by this search are all contained within</span>
+        <span class="c1"># &lt;a&gt; elements that include links to the station pages.  We can use</span>
+        <span class="c1"># this to find them.</span>
+        <span class="n">station_anchors</span> <span class="o">=</span> <span class="n">soup</span><span class="o">.</span><span class="n">find_all</span><span class="p">(</span><span class="n">href</span><span class="o">=</span><span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s2">&quot;station_page.php&quot;</span><span class="p">))</span>
+        <span class="n">station_ids</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">a</span><span class="o">.</span><span class="n">text</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">station_anchors</span> <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">text</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">station_id</span><span class="p">)]</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">station_ids</span>
+
+<div class="viewcode-block" id="DataBuoy.station_search"><a class="viewcode-back" href="../../NDBC.html#NDBC.NDBC.DataBuoy.station_search">[docs]</a>    <span class="k">def</span> <span class="nf">station_search</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">search_type</span><span class="o">=</span><span class="s2">&quot;radial&quot;</span><span class="p">,</span>
+        <span class="n">lat1</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">lat2</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">lon1</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">lon2</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">uom</span><span class="o">=</span><span class="s2">&quot;metric&quot;</span><span class="p">,</span>
+        <span class="n">time</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">obs_type</span><span class="o">=</span><span class="s2">&quot;buoy&quot;</span><span class="p">,</span>
+        <span class="n">distance</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Station search function.  Defaults to radial search.  Uses lat/lon</span>
+<span class="sd">        coordinates if supplied, otherwise will default to the coordinates of</span>
+<span class="sd">        the DataBuoy instance (if available).  UOM determines which distance</span>
+<span class="sd">        unit is used (defaults to metric) and time determines the time offset</span>
+<span class="sd">        in which measurements must have occurred for a station to be</span>
+<span class="sd">        included.  Obs_type determines the type of stations to be included (</span>
+<span class="sd">        buoy: moored buoy, ship: Ships and drifters, all: All station types).</span>
+<span class="sd">        Distance determines how wide an area to include (only applies to</span>
+<span class="sd">        radial search).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># CHECKING ARGS BEFORE WE START DOING ANYTHING FANCY</span>
+        <span class="n">lat1</span><span class="p">,</span> <span class="n">lon1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ss_args_check</span><span class="p">(</span>
+            <span class="n">search_type</span><span class="p">,</span> <span class="n">lat1</span><span class="p">,</span> <span class="n">lat2</span><span class="p">,</span> <span class="n">lon1</span><span class="p">,</span> <span class="n">lon2</span><span class="p">,</span> <span class="n">uom</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">obs_type</span><span class="p">,</span> <span class="n">distance</span>
+        <span class="p">)</span>
+        <span class="c1"># OKAY, LET&#39;S BEGIN</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ss_build_url</span><span class="p">(</span>
+            <span class="n">search_type</span><span class="p">,</span> <span class="n">lat1</span><span class="p">,</span> <span class="n">lat2</span><span class="p">,</span> <span class="n">lon1</span><span class="p">,</span> <span class="n">lon2</span><span class="p">,</span> <span class="n">uom</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">obs_type</span><span class="p">,</span> <span class="n">distance</span>
+        <span class="p">)</span>
+        <span class="n">ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ss_parse_response</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ids</span></div>
+
+    <span class="c1"># ------------------ DATA PERSISTENCE METHODS -----------------------------</span>
+<div class="viewcode-block" id="DataBuoy.stdmet_to_json"><a class="viewcode-back" href="../../NDBC.html#NDBC.NDBC.DataBuoy.stdmet_to_json">[docs]</a>    <span class="nd">@deprecated</span><span class="p">(</span>
+        <span class="n">deprecated_in</span><span class="o">=</span><span class="s2">&quot;1.1.1&quot;</span><span class="p">,</span>
+        <span class="n">removed_in</span><span class="o">=</span><span class="s2">&quot;2.0.0&quot;</span><span class="p">,</span>
+        <span class="n">details</span><span class="o">=</span><span class="s2">&quot;Use data_to_json instead (defaults to stdmet)&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">def</span> <span class="nf">stdmet_to_json</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file_name</span><span class="p">,</span> <span class="n">date_format</span><span class="o">=</span><span class="s2">&quot;iso&quot;</span><span class="p">,</span> <span class="n">orient</span><span class="o">=</span><span class="s2">&quot;columns&quot;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        A simple method for returning the existing stdmet data to a json file</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;stdmet&quot;</span><span class="p">][</span><span class="s2">&quot;data&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to_json</span><span class="p">(</span>
+            <span class="n">file_name</span><span class="p">,</span> <span class="n">date_format</span><span class="o">=</span><span class="n">date_format</span><span class="p">,</span> <span class="n">orient</span><span class="o">=</span><span class="n">orient</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="DataBuoy.data_to_json"><a class="viewcode-back" href="../../NDBC.html#NDBC.NDBC.DataBuoy.data_to_json">[docs]</a>    <span class="k">def</span> <span class="nf">data_to_json</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">file_name</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">date_format</span><span class="o">=</span><span class="s2">&quot;iso&quot;</span><span class="p">,</span> <span class="n">orient</span><span class="o">=</span><span class="s2">&quot;columns&quot;</span><span class="p">,</span> <span class="n">data_type</span><span class="o">=</span><span class="s2">&quot;stdmet&quot;</span>
+    <span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return specific data package data as JSON to specified file</span>
+<span class="sd">        :param file_name: Desired filename. If not provided will be station_id_data_type.json</span>
+<span class="sd">        :param date_format: Format for datetime values</span>
+<span class="sd">        :param orient: Cofigure orientation of DataFrame to JSON</span>
+<span class="sd">        :param data_type: Which data pacakge to return</span>
+<span class="sd">        :return: Success/Failure message</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">file_name</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">file_name</span> <span class="k">if</span> <span class="n">file_name</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">station_id</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">data_type</span><span class="si">}</span><span class="s2">.json&quot;</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">data_type</span><span class="p">][</span><span class="s2">&quot;data&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to_json</span><span class="p">(</span>
+                <span class="n">file_name</span><span class="p">,</span> <span class="n">date_format</span><span class="o">=</span><span class="n">date_format</span><span class="p">,</span> <span class="n">orient</span><span class="o">=</span><span class="n">orient</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">file_name</span><span class="si">}</span><span class="s2"> successfully generated&quot;</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot;JSON data export failed&quot;</span></div>
+
+<div class="viewcode-block" id="DataBuoy.save"><a class="viewcode-back" href="../../NDBC.html#NDBC.NDBC.DataBuoy.save">[docs]</a>    <span class="k">def</span> <span class="nf">save</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">orient</span><span class="o">=</span><span class="s2">&quot;records&quot;</span><span class="p">,</span> <span class="n">date_format</span><span class="o">=</span><span class="s2">&quot;iso&quot;</span><span class="p">):</span>
+        <span class="n">file_name</span> <span class="o">=</span> <span class="n">filename</span> <span class="k">if</span> <span class="n">filename</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">&quot;data_buoy_&quot;</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">station_id</span><span class="si">}</span><span class="s2">.json&quot;</span>
+        <span class="c1"># Converting stdmet data attribute to JSON for object serialization</span>
+        <span class="k">for</span> <span class="n">dtype</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">DATA_PACKAGES</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">dtype</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">dtype</span><span class="p">][</span><span class="s2">&quot;meta&quot;</span><span class="p">][</span><span class="s2">&quot;orient&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">orient</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">dtype</span><span class="p">][</span><span class="s2">&quot;meta&quot;</span><span class="p">][</span><span class="s2">&quot;date_format&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">date_format</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">dtype</span><span class="p">][</span><span class="s2">&quot;data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">dtype</span><span class="p">][</span><span class="s2">&quot;data&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to_json</span><span class="p">(</span>
+                    <span class="n">orient</span><span class="o">=</span><span class="n">orient</span><span class="p">,</span> <span class="n">date_format</span><span class="o">=</span><span class="n">date_format</span>
+                <span class="p">)</span>
+        <span class="c1"># converting object attributes to a dictionary</span>
+        <span class="n">obj_vals</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span>
+        <span class="c1"># Converting our dictionary to a valid JSON string</span>
+        <span class="n">obj_str</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">obj_vals</span><span class="p">)</span>
+        <span class="c1"># Writing our data to the filename specified</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file_name</span><span class="p">,</span> <span class="s2">&quot;w+&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">obj_str</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="DataBuoy.load"><a class="viewcode-back" href="../../NDBC.html#NDBC.NDBC.DataBuoy.load">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">load</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">filename</span><span class="p">):</span>
+        <span class="n">file_str</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">file_str</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">dtype</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="n">DATA_PACKAGES</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">obj</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">dtype</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+                <span class="n">orient</span> <span class="o">=</span> <span class="n">obj</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="n">dtype</span><span class="p">][</span><span class="s2">&quot;meta&quot;</span><span class="p">][</span><span class="s2">&quot;orient&quot;</span><span class="p">]</span>
+                <span class="n">obj</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="n">dtype</span><span class="p">][</span><span class="s2">&quot;data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_json</span><span class="p">(</span>
+                    <span class="n">obj</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">][</span><span class="n">dtype</span><span class="p">][</span><span class="s2">&quot;data&quot;</span><span class="p">],</span> <span class="n">orient</span><span class="o">=</span><span class="n">orient</span>
+                <span class="p">)</span>
+            <span class="n">inst</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">obj</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">inst</span><span class="o">.</span><span class="fm">__setattr__</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">inst</span></div></div>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../index.html">NDBC</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../readme.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../license.html">License</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../authors.html">Authors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../changelog.html">Changelog</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../modules.html">Module Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../contributing.html">Contributing</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../index.html">Documentation overview</a><ul>
+  <li><a href="../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2022, Ryan Manzer.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 5.1.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

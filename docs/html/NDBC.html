@@ -1,0 +1,374 @@
+
+<!DOCTYPE html>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+    <title>NDBC package &#8212; NDBC 1.1.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Contributing" href="contributing.html" />
+    <link rel="prev" title="src" href="modules.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="ndbc-package">
+<h1>NDBC package<a class="headerlink" href="#ndbc-package" title="Permalink to this heading">¶</a></h1>
+<section id="primary-classes">
+<h2>Primary Classes<a class="headerlink" href="#primary-classes" title="Permalink to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">NDBC.NDBC.</span></span><span class="sig-name descname"><span class="pre">DataBuoy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">station_id</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/NDBC/NDBC.html#DataBuoy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#NDBC.NDBC.DataBuoy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<blockquote>
+<div><p>This class contains functions used to fetch and parse data from
+National Data Buoy Center stations.</p>
+</div></blockquote>
+<p>Example:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">NDBC.NDBC</span> <span class="kn">import</span> <span class="n">DataBuoy</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">N42</span> <span class="o">=</span> <span class="n">DataBuoy</span><span class="p">(</span><span class="s1">&#39;46042&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">N42</span><span class="o">.</span><span class="n">get_data</span><span class="p">()</span>
+<span class="go">        &#39;June not available.&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">N42</span><span class="o">.</span><span class="n">data</span>
+<span class="go">        {&#39;stdmet&#39;:       WDIR  WSPD   GST  WVHT  ...    WTMP   DEWP   VIS   TIDE</span>
+<span class="go">    2018-04-30 23:50:00  309   9.6  11.6  2.84  ...    12.6  999.0  99.0  99.00</span>
+<span class="go">            ....</span>
+<span class="go">    2018-05-31 22:50:00  304   9.3  11.4  2.02  ...    12.8  999.0  99.0  99.00</span>
+<span class="go">    [742 rows x 13 columns]}</span>
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.ATTR_PAT">
+<span class="sig-name descname"><span class="pre">ATTR_PAT</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'&lt;b&gt;(.*):&lt;/b&gt;\\s*(.*)&lt;br/&gt;'</span></em><a class="headerlink" href="#NDBC.NDBC.DataBuoy.ATTR_PAT" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.BASE_URL">
+<span class="sig-name descname"><span class="pre">BASE_URL</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'https://www.ndbc.noaa.gov/'</span></em><a class="headerlink" href="#NDBC.NDBC.DataBuoy.BASE_URL" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.DATA_PACKAGES">
+<span class="sig-name descname"><span class="pre">DATA_PACKAGES</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'cwind':</span> <span class="pre">{'name':</span> <span class="pre">'Continuos</span> <span class="pre">Wind</span> <span class="pre">Data',</span> <span class="pre">'url_char':</span> <span class="pre">'c'},</span> <span class="pre">'srad':</span> <span class="pre">{'name':</span> <span class="pre">'Solar</span> <span class="pre">radiation</span> <span class="pre">data',</span> <span class="pre">'url_char':</span> <span class="pre">'r'},</span> <span class="pre">'stdmet':</span> <span class="pre">{'name':</span> <span class="pre">'Standard</span> <span class="pre">meteorological</span> <span class="pre">data',</span> <span class="pre">'url_char':</span> <span class="pre">'h'},</span> <span class="pre">'swden':</span> <span class="pre">{'name':</span> <span class="pre">'Spectral</span> <span class="pre">Wave</span> <span class="pre">Density</span> <span class="pre">data',</span> <span class="pre">'url_char':</span> <span class="pre">'w'},</span> <span class="pre">'swdir':</span> <span class="pre">{'name':</span> <span class="pre">'Spectral</span> <span class="pre">wave</span> <span class="pre">(alpha1)</span> <span class="pre">direction</span> <span class="pre">data',</span> <span class="pre">'url_char':</span> <span class="pre">'d'},</span> <span class="pre">'swdir2':</span> <span class="pre">{'name':</span> <span class="pre">'Spectral</span> <span class="pre">wave</span> <span class="pre">(alpha2)</span> <span class="pre">direction</span> <span class="pre">data',</span> <span class="pre">'url_char':</span> <span class="pre">'i'},</span> <span class="pre">'swr1':</span> <span class="pre">{'name':</span> <span class="pre">'Spectral</span> <span class="pre">wave</span> <span class="pre">(r1)</span> <span class="pre">direction</span> <span class="pre">data',</span> <span class="pre">'url_char':</span> <span class="pre">'j'},</span> <span class="pre">'swr2':</span> <span class="pre">{'name':</span> <span class="pre">'Spectral</span> <span class="pre">wave</span> <span class="pre">(r2)</span> <span class="pre">direction</span> <span class="pre">data',</span> <span class="pre">'url_char':</span> <span class="pre">'k'}}</span></em><a class="headerlink" href="#NDBC.NDBC.DataBuoy.DATA_PACKAGES" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.LAT_PAT">
+<span class="sig-name descname"><span class="pre">LAT_PAT</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'\\d+\\.\\d+\\s+N'</span></em><a class="headerlink" href="#NDBC.NDBC.DataBuoy.LAT_PAT" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.LON_PAT">
+<span class="sig-name descname"><span class="pre">LON_PAT</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'\\d+\\.\\d+\\s+W'</span></em><a class="headerlink" href="#NDBC.NDBC.DataBuoy.LON_PAT" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.OBS_TYPES">
+<span class="sig-name descname"><span class="pre">OBS_TYPES</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'all':</span> <span class="pre">'A',</span> <span class="pre">'buoy':</span> <span class="pre">'B',</span> <span class="pre">'ship':</span> <span class="pre">'S'}</span></em><a class="headerlink" href="#NDBC.NDBC.DataBuoy.OBS_TYPES" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.SEARCH_TYPES">
+<span class="sig-name descname"><span class="pre">SEARCH_TYPES</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'box':</span> <span class="pre">'box_search.php',</span> <span class="pre">'radial':</span> <span class="pre">'radial_search.php'}</span></em><a class="headerlink" href="#NDBC.NDBC.DataBuoy.SEARCH_TYPES" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.STATION_URL">
+<span class="sig-name descname"><span class="pre">STATION_URL</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'https://www.ndbc.noaa.gov/station_page.php?station={}'</span></em><a class="headerlink" href="#NDBC.NDBC.DataBuoy.STATION_URL" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.UOMS">
+<span class="sig-name descname"><span class="pre">UOMS</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'english':</span> <span class="pre">'E',</span> <span class="pre">'metric':</span> <span class="pre">'M'}</span></em><a class="headerlink" href="#NDBC.NDBC.DataBuoy.UOMS" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.cwind">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">cwind</span></span><a class="headerlink" href="#NDBC.NDBC.DataBuoy.cwind" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.data_monthurls">
+<span class="sig-name descname"><span class="pre">data_monthurls</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['https://www.ndbc.noaa.gov/data/{dtype}/{month_abbrv}/{station}.txt',</span> <span class="pre">'https://www.ndbc.noaa.gov/view_text_file.php?filename={station}{month_num}{year}.txt.gz&amp;dir=data/{dtype}/{month_abbrv}/']</span></em><a class="headerlink" href="#NDBC.NDBC.DataBuoy.data_monthurls" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.data_to_json">
+<span class="sig-name descname"><span class="pre">data_to_json</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">date_format</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'iso'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">orient</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'columns'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'stdmet'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/NDBC/NDBC.html#DataBuoy.data_to_json"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#NDBC.NDBC.DataBuoy.data_to_json" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return specific data package data as JSON to specified file
+:param file_name: Desired filename. If not provided will be station_id_data_type.json
+:param date_format: Format for datetime values
+:param orient: Cofigure orientation of DataFrame to JSON
+:param data_type: Which data pacakge to return
+:return: Success/Failure message</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.data_yearurls">
+<span class="sig-name descname"><span class="pre">data_yearurls</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['https://www.ndbc.noaa.gov/view_text_file.php?filename={station}{url_char}{year}.txt.gz&amp;dir=data/historical/{dtype}/']</span></em><a class="headerlink" href="#NDBC.NDBC.DataBuoy.data_yearurls" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.get_data">
+<span class="sig-name descname"><span class="pre">get_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">years</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">months</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">datetime_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'stdmet'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/NDBC/NDBC.html#DataBuoy.get_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#NDBC.NDBC.DataBuoy.get_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fetch data paylod for a given NDBC data station.
+:param years: List of years
+:param months: List of months
+:param datetime_index: Whether to use datetime as DataFrame index or column
+:param data_type: Data payload type
+:return: None, data stored as part of Class object</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.get_station_metadata">
+<span class="sig-name descname"><span class="pre">get_station_metadata</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/NDBC/NDBC.html#DataBuoy.get_station_metadata"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#NDBC.NDBC.DataBuoy.get_station_metadata" title="Permalink to this definition">¶</a></dt>
+<dd><p>Define method to capture and store station metadata
+:return: None</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.get_stdmet">
+<span class="sig-name descname"><span class="pre">get_stdmet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">years</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">months</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">datetime_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/NDBC/NDBC.html#DataBuoy.get_stdmet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#NDBC.NDBC.DataBuoy.get_stdmet" title="Permalink to this definition">¶</a></dt>
+<dd><p>Identify valid data files to append to stdmet data and call load_std()
+:param years: A list of years for which to gather data
+:param months: A list of months for which to gather data
+:return: None or string, if times are unavailable</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 1.0.2: </span>This will be removed in 2.0.0. Use get_data with “stdmet” data_type parameter instead</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.load">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/NDBC/NDBC.html#DataBuoy.load"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#NDBC.NDBC.DataBuoy.load" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.load_stdmet">
+<span class="sig-name descname"><span class="pre">load_stdmet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">url</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">datetime_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/NDBC/NDBC.html#DataBuoy.load_stdmet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#NDBC.NDBC.DataBuoy.load_stdmet" title="Permalink to this definition">¶</a></dt>
+<dd><p>Transform NDBC Standard Meteorological text data into pandas Dataframe
+and append to results
+:param url: Location of text data
+:return: None</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.save">
+<span class="sig-name descname"><span class="pre">save</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">orient</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'records'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">date_format</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'iso'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/NDBC/NDBC.html#DataBuoy.save"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#NDBC.NDBC.DataBuoy.save" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.set_station_id">
+<span class="sig-name descname"><span class="pre">set_station_id</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">station_id</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/NDBC/NDBC.html#DataBuoy.set_station_id"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#NDBC.NDBC.DataBuoy.set_station_id" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.srad">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">srad</span></span><a class="headerlink" href="#NDBC.NDBC.DataBuoy.srad" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.station_search">
+<span class="sig-name descname"><span class="pre">station_search</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">search_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'radial'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lat1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lat2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lon1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lon2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">uom</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'metric'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obs_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'buoy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/NDBC/NDBC.html#DataBuoy.station_search"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#NDBC.NDBC.DataBuoy.station_search" title="Permalink to this definition">¶</a></dt>
+<dd><p>Station search function.  Defaults to radial search.  Uses lat/lon
+coordinates if supplied, otherwise will default to the coordinates of
+the DataBuoy instance (if available).  UOM determines which distance
+unit is used (defaults to metric) and time determines the time offset
+in which measurements must have occurred for a station to be
+included.  Obs_type determines the type of stations to be included (
+buoy: moored buoy, ship: Ships and drifters, all: All station types).
+Distance determines how wide an area to include (only applies to
+radial search).</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.stdmet">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">stdmet</span></span><a class="headerlink" href="#NDBC.NDBC.DataBuoy.stdmet" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.stdmet_to_json">
+<span class="sig-name descname"><span class="pre">stdmet_to_json</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">date_format</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'iso'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">orient</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'columns'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/NDBC/NDBC.html#DataBuoy.stdmet_to_json"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#NDBC.NDBC.DataBuoy.stdmet_to_json" title="Permalink to this definition">¶</a></dt>
+<dd><p>A simple method for returning the existing stdmet data to a json file</p>
+<div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 1.1.1: </span>This will be removed in 2.0.0. Use data_to_json instead (defaults to stdmet)</p>
+</div>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.swden">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">swden</span></span><a class="headerlink" href="#NDBC.NDBC.DataBuoy.swden" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.swdir">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">swdir</span></span><a class="headerlink" href="#NDBC.NDBC.DataBuoy.swdir" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.swdir2">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">swdir2</span></span><a class="headerlink" href="#NDBC.NDBC.DataBuoy.swdir2" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.swr1">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">swr1</span></span><a class="headerlink" href="#NDBC.NDBC.DataBuoy.swr1" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="NDBC.NDBC.DataBuoy.swr2">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">swr2</span></span><a class="headerlink" href="#NDBC.NDBC.DataBuoy.swr2" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="accessory-classes">
+<h2>Accessory Classes<a class="headerlink" href="#accessory-classes" title="Permalink to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="NDBC.models.DataPackage">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">NDBC.models.</span></span><span class="sig-name descname"><span class="pre">DataPackage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/NDBC/models.html#DataPackage"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#NDBC.models.DataPackage" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Define data package</p>
+<p>This class defines a custom data class for individual NDBC data packages.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="NDBC.models.DataPackage.data">
+<span class="sig-name descname"><span class="pre">data</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">DataFrame</span></em><a class="headerlink" href="#NDBC.models.DataPackage.data" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="NDBC.models.DataPackage.data_type">
+<span class="sig-name descname"><span class="pre">data_type</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#NDBC.models.DataPackage.data_type" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="NDBC.models.DataPackage.metadata">
+<span class="sig-name descname"><span class="pre">metadata</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></em><a class="headerlink" href="#NDBC.models.DataPackage.metadata" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="NDBC.models.DataStation">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">NDBC.models.</span></span><span class="sig-name descname"><span class="pre">DataStation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">station_id</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/NDBC/models.html#DataStation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#NDBC.models.DataStation" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Define basic data station class/object</p>
+<p>This class is focused on only the data properties necessary to identify a station</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="NDBC.models.DataStation.set_station_id">
+<span class="sig-name descname"><span class="pre">set_station_id</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">station_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/NDBC/models.html#DataStation.set_station_id"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#NDBC.models.DataStation.set_station_id" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set ID for data station</p>
+<p>Provide a mechanism to set a station ID if an object was instantiated without one</p>
+<dl class="simple">
+<dt>Args:</dt><dd><p>station_id (Union[int, str]): The alphanumeric station identifier</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">NDBC</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="readme.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+<li class="toctree-l1"><a class="reference internal" href="authors.html">Authors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="changelog.html">Changelog</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">Module Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">NDBC package</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  <li><a href="modules.html">src</a><ul>
+      <li>Previous: <a href="modules.html" title="previous chapter">src</a></li>
+      <li>Next: <a href="contributing.html" title="next chapter">Contributing</a></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2022, Ryan Manzer.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 5.1.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/NDBC.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
