@@ -2,6 +2,10 @@
 Changelog
 =========
 
+Version 1.1.2
+=============
+- bug(fix) Update `pandas.read_csv` function call to avoid deprecated positional arguments
+
 Version 1.1.1
 =============
 - bug(fix) Correct issue with alpha characters in station ID string [#32](https://github.com/GenSci/NDBC/issues/32)
