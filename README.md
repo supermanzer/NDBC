@@ -2,6 +2,8 @@
 
 ![alt text](http://www.ndbc.noaa.gov/images/nws/noaaleft.jpg "NOAA") ![alt text](http://www.ndbc.noaa.gov/images/nws/ndbc_title.jpg "NDBC")
 
+[Documentation](https://supermanzer.github.io/NDBC/html/index.html)
+
 This repository represents my attempts to build out Python class(es)
 to facilitate the acquisition, analysis, and visualization of National
 Data Buoy Center (NDBC) data. The goal is to develop a set of APIs to
