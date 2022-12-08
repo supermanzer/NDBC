@@ -3,7 +3,7 @@ bleach==3.3.0
 bs4==0.0.1
 CacheControl==0.12.6
 cachy==0.3.0
-certifi==2020.12.5
+certifi==2022.12.7
 cffi==1.14.5
 chardet==3.0.4
 cleo==0.7.6
