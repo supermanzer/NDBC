@@ -2,6 +2,11 @@
 Changelog
 =========
 
+Version 1.2.0
+=============
+- feat: Updated documentation links for PyPI publishing
+- feat: Added documentation workflow
+
 Version 1.1.2
 =============
 - bug(fix) Update `pandas.read_csv` function call to avoid deprecated positional arguments
