@@ -22,7 +22,7 @@ jaraco.classes==3.2.3
 jeepney==0.8.0
 Jinja2==3.1.2
 keyring==23.11.0
-markdown-it-py==2.1.0
+markdown-it-py==2.2.0
 MarkupSafe==2.1.1
 mdit-py-plugins==0.3.0
 mdurl==0.1.2
